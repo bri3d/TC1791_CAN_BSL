@@ -12,7 +12,16 @@ Such extraction is outside of the scope of this BSL code, which only intends to 
 
 # Documentation
 
-Nice pictures of HWCFG/PORT0 test points to attach to coming soon :)
+Perform these PCB modifications to a Simos18 main board to enter the BSL. A few notes:
+
+* The yellow goo isn't bodge wires or something, it's potting sealant from the other side of the PCB that's been pushed through the vias. If you find it ugly it is easy to remove.
+* To open the ECU is very easy. It's held together with a few bent metal tabs and black RTV sealant. Simply bend the metal tabs away and cut through the black RTV sealant and the cover will lift right off. To reinstall is just the opposite.
+* If you have a nicer setup with pogo pins and pullup / pulldown capability, you're in luck!
+* Nothing is timing critical so a jig with programmable GPIO isn't necessary. You can just touch the last config pin to ground by hand while you turn on power, if that's how you roll.
+
+![PCB1](Board1.jpg)
+![PCB2](Board2.jpg)
+![PCB3](Board3.jpg)
 
 # Current tools:
 
