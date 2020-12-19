@@ -23,7 +23,15 @@ Perform these PCB modifications to a Simos18 main board to enter the BSL. A few 
 ![PCB2](Board2.jpg)
 ![PCB3](Board3.jpg)
 
+To communicate, connect the following: 
+
+* + ~13V: Left harness connector pins 6, 50, 86 (6 is one of the large pins, the rest are small).
+* GROUND: 1 (this is the upper-right large pin).
+* CANH: 79
+* CANL: 80
+
+
 # Current tools:
 
-[bootloader.py](bootloader.py) : This tool uploads "bootloader.bin" into an ECU in Bootstrap Loader mode.
-[bootloader](bootloader) : COMING SOON - This directory contains a project intended for us with the HiTec Tricore Free Toolchain (GCC) wich will produce a bootstrap loader binary containing some basic command primitives. 
+* [bootloader.py](bootloader.py) : This tool uploads "bootloader.bin" into an ECU in Bootstrap Loader mode.
+* [bootloader](Bootloader_2) : This directory contains a project intended for us with the HiTec Tricore Free Toolchain (GCC) wich will produce a bootstrap loader binary containing some basic command primitives. It uses the basic TriBoard TC1791 iRAM linker presets from HiTec, with the DRAM memory map adjusted to not clobber the boot-time device id stored at D0000000 to D000000C. CANBus primitives were generated using DaVe V2.
