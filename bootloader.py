@@ -6,6 +6,37 @@ from tqdm import tqdm
 import struct
 import time
 
+sector_map_tc1791 = { # Sector lengths for PMEM routines
+    0: 0x4000,
+    1: 0x4000,
+    2: 0x4000,
+    3: 0x4000,
+    4: 0x4000,
+    5: 0x4000,
+    6: 0x4000,
+    7: 0x4000,
+    8: 0x20000,
+    9: 0x40000,
+    10: 0x40000,
+    11: 0x40000,
+    12: 0x40000,
+    13: 0x40000,
+    14: 0x40000,
+    15: 0x40000
+}
+
+def bits(byte):
+    bit_arr = [(byte >> 7) & 1,
+            (byte >> 6) & 1,
+            (byte >> 5) & 1,
+            (byte >> 4) & 1,
+            (byte >> 3) & 1,
+            (byte >> 2) & 1,
+            (byte >> 1) & 1,
+            (byte) & 1]
+    bit_arr.reverse()
+    return bit_arr
+
 can_interface = 'can0'
 bus = can.interface.Bus(can_interface, bustype='socketcan')
 
@@ -60,8 +91,57 @@ def read_byte(byte_specifier):
         byte_data += message.data[1:5]
     return byte_data
 
+def print_enabled_disabled(string, value):
+    enabled_or_disabled = "ENABLED" if value > 0 else "DISABLED"
+    print(string + " " + enabled_or_disabled)
+
+def print_sector_status(string, procon_sector_status):
+    current_address = 0
+    for sector_number in sector_map_tc1791:
+        protection_status = procon_sector_status[sector_number]
+        if sector_number > 9:
+            protection_status = procon_sector_status[math.ceil(sector_number - (sector_number % 2) - (sector_number - 10) / 2)]
+        if protection_status > 0:                
+            print(string + "Sector " + str(sector_number) + " " + hex(current_address) + ":" + hex((current_address+sector_map_tc1791[sector_number])) + " : " + "ENABLED")
+            
+        current_address += sector_map_tc1791[sector_number]
+
+def read_flash_properties(flash_num, pmu_base_addr):
+    FSR = 0x1010
+    FCON = 0x1014
+    PROCON0 = 0x1020
+    PROCON1 = 0x1024
+    PROCON2 = 0x1028
+    fsr_value = read_byte(struct.pack(">I", pmu_base_addr + FSR))
+    fcon_value = read_byte(struct.pack(">I", pmu_base_addr + FCON))
+    procon0_value = read_byte(struct.pack(">I", pmu_base_addr + PROCON0))
+    procon1_value = read_byte(struct.pack(">I", pmu_base_addr + PROCON1))
+    procon2_value = read_byte(struct.pack(">I", pmu_base_addr + PROCON2))
+    pmem_string = "PMEM" + str(flash_num)
+    flash_status = bits(fsr_value[2])
+    print_enabled_disabled(pmem_string + " Protection Installation: ", flash_status[0])
+    print_enabled_disabled(pmem_string + " Read Protection Installation: ", flash_status[2])
+    print_enabled_disabled(pmem_string + " Read Protection Inhibit: ", flash_status[3])
+    print_enabled_disabled(pmem_string + " Write Protection User 0: ", flash_status[5])
+    print_enabled_disabled(pmem_string + " Write Protection User 1: ", flash_status[6])
+    print_enabled_disabled(pmem_string + " OTP Installation: ", flash_status[7])
+    protection_status = bits(fcon_value[2])
+    print_enabled_disabled(pmem_string + " Read Protection: ", protection_status[0])
+    print_enabled_disabled(pmem_string + " Disable Code Fetch from Flash Memory: ", protection_status[1])
+    print_enabled_disabled(pmem_string + " Disable Any Data Fetch from Flash: ", protection_status[2])
+    print_enabled_disabled(pmem_string + " Disable Data Fetch from DMA Controller: ", protection_status[4])
+    print_enabled_disabled(pmem_string + " Disable Data Fetch from PCP Controller: ", protection_status[5])
+    print_enabled_disabled(pmem_string + " Disable Data Fetch from SHE Controller: ", protection_status[6])
+    procon0_sector_status = bits(procon0_value[0]) + bits(procon0_value[1])
+    print_sector_status(pmem_string + " USR0 Read Protection ", procon0_sector_status)
+    procon1_sector_status = bits(procon1_value[0]) + bits(procon1_value[1])
+    print_sector_status(pmem_string + " USR1 Write Protection ", procon1_sector_status)
+    procon2_sector_status = bits(procon2_value[0]) + bits(procon2_value[1])
+    print_sector_status(pmem_string + " USR2 OTP Protection ", procon2_sector_status)
+
+
 class BootloaderRepl(cmd.Cmd):
-    intro = 'Welcome to Tricore BSL.   Type help or ? to list commands, you are likely looking for upload to start.\n'
+    intro = 'Welcome to Tricore BSL. Type help or ? to list commands, you are likely looking for upload to start.\n'
     prompt = '(BSL) '
     file = None
 
@@ -82,6 +162,16 @@ class BootloaderRepl(cmd.Cmd):
         byte_specifier = bytearray.fromhex(arg)
         byte = read_byte(byte_specifier)
         print(byte.hex())
+
+    def do_flashinfo(self, arg):
+        'Read flash information including PMEM protection status'
+        PMU_BASE_ADDRS = {
+            0:0xF8001000,
+            1:0xF8003000
+        }
+
+        for pmu_num in PMU_BASE_ADDRS:
+            read_flash_properties(pmu_num, PMU_BASE_ADDRS[pmu_num]) 
 
     def do_bye(self, arg):
         'Exit'
