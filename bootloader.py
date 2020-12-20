@@ -139,6 +139,12 @@ def read_flash_properties(flash_num, pmu_base_addr):
     procon2_sector_status = bits(procon2_value[0]) + bits(procon2_value[1])
     print_sector_status(pmem_string + " USR2 OTP Protection ", procon2_sector_status)
 
+def read_bytes_file(base_addr, size, filename):
+    output_file = open(filename, 'wb')
+    for current_address in tqdm(range(base_addr, base_addr + size, 4), unit_scale=True, unit="block"):
+        bytes = read_byte(struct.pack(">I", current_address))
+        output_file.write(bytes)
+    output_file.close()
 
 class BootloaderRepl(cmd.Cmd):
     intro = 'Welcome to Tricore BSL. Type help or ? to list commands, you are likely looking for upload to start.\n'
@@ -171,7 +177,16 @@ class BootloaderRepl(cmd.Cmd):
         }
 
         for pmu_num in PMU_BASE_ADDRS:
-            read_flash_properties(pmu_num, PMU_BASE_ADDRS[pmu_num]) 
+            read_flash_properties(pmu_num, PMU_BASE_ADDRS[pmu_num])
+    
+    def do_dumpmaskrom(self, arg):
+        'Dump the Tricore Mask ROM to maskrom.bin'
+        read_bytes_file(0xAFFFC000, 0x4000, "maskrom.bin")
+
+    def do_dumpmem(self, arg):
+        'dumpmem addr size filename: Dump <addr> to <filename> with <size> bytes'
+        args = arg.split()
+        read_bytes_file(int(args[0], 16), int(args[1], 16), args[2])
 
     def do_bye(self, arg):
         'Exit'
