@@ -91,6 +91,27 @@ def read_byte(byte_specifier):
         byte_data += message.data[1:5]
     return byte_data
 
+def write_byte(addr, value):
+    data = bytearray([0x03])
+    data += addr
+    data += bytearray([0x0,0x0,0x0])
+    message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300,data=data)
+    bus.send(message)
+    byte_data = bytearray()
+    message = bus.recv()
+    if(message.data[0] != 0x4):
+        return False
+    data = bytearray([0x03])
+    data += value
+    data += bytearray([0x0,0x0,0x0])
+    message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300,data=data)
+    bus.send(message)
+    message = bus.recv()
+    if(message.data[0] != 0x4):
+        return False
+    else:
+        return True
+
 def print_enabled_disabled(string, value):
     enabled_or_disabled = "ENABLED" if value > 0 else "DISABLED"
     print(string + " " + enabled_or_disabled)
@@ -146,6 +167,8 @@ def read_bytes_file(base_addr, size, filename):
         output_file.write(bytes)
     output_file.close()
 
+
+
 class BootloaderRepl(cmd.Cmd):
     intro = 'Welcome to Tricore BSL. Type help or ? to list commands, you are likely looking for upload to start.\n'
     prompt = '(BSL) '
@@ -164,10 +187,21 @@ class BootloaderRepl(cmd.Cmd):
             print("Failed to retrieve Device ID")
             
     def do_readaddr(self, arg):
-        'Read 32 bits from an arbitrary address'
+        'readaddr <addr> : Read 32 bits from an arbitrary address'
         byte_specifier = bytearray.fromhex(arg)
         byte = read_byte(byte_specifier)
         print(byte.hex())
+
+    def do_writeaddr(self, arg):
+        'writeaddr <addr> <data> : Write 32 bits to an arbitrary address'
+        args = arg.split()
+        byte_specifier = bytearray.fromhex(args[0])
+        data_specifier = bytearray.fromhex(args[1])
+        is_success = write_byte(byte_specifier, data_specifier)
+        if is_success:
+            print("Wrote " + args[1] + " to " + args[0])
+        else:
+            print("Failed to write value.")
 
     def do_flashinfo(self, arg):
         'Read flash information including PMEM protection status'
@@ -184,7 +218,7 @@ class BootloaderRepl(cmd.Cmd):
         read_bytes_file(0xAFFFC000, 0x4000, "maskrom.bin")
 
     def do_dumpmem(self, arg):
-        'dumpmem addr size filename: Dump <addr> to <filename> with <size> bytes'
+        'dumpmem <addr> <size> <filename>: Dump <addr> to <filename> with <size> bytes'
         args = arg.split()
         read_bytes_file(int(args[0], 16), int(args[1], 16), args[2])
 

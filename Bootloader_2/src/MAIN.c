@@ -211,57 +211,146 @@ void MAIN_vWriteWDTCON0(uword uwValue)
 
 }
 
+struct bootloader_state boot;
+
 void MAIN_sendCan(ubyte canData[]) {
 	while(CAN_ubRequestMsgObj(1) != 1);
 	CAN_vLoadData(1, canData);
 	CAN_vTransmit(1);
 }
 
+void MAIN_CMD_readDeviceId() {
+	ubyte i;
+	ubyte canData[8];
+	ubyte *device_id = (ubyte *)0xD0000000;
+	canData[0] = 0x1;
+	canData[1] = 0x0;
+	for(i = 0; i < 6; i++) {
+		canData[i + 2] = device_id[i];
+	}
+	MAIN_sendCan(canData);
+	canData[1] = 0x1;
+	for(i = 0; i < 6; i++) {
+		canData[i + 2] = device_id[i + 6];
+	}
+	MAIN_sendCan(canData);
+}
+
+void MAIN_CMD_write32SetAddress(CAN_SWObj *cur_msg) {
+	uword address = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16) | (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
+	ubyte canData[8];
+	canData[0] = 0x4;
+	canData[4] = (address>>24) & 0xFF;
+	canData[3] = (address>>16) & 0xFF;
+	canData[2] = (address>>8) & 0xFF;
+	canData[1] = address & 0xFF;
+	canData[5] = 0xFF;
+	canData[6] = 0xFF;
+	canData[7] = 0xFF;
+	MAIN_sendCan(canData);
+	boot.address = address;
+	boot.status = WAIT_WRITE32_DATA;
+}
+
+void MAIN_CMD_write32SetData(CAN_SWObj *cur_msg) {
+	uword data = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16) | (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
+	*(uword *)boot.address = data;
+	ubyte canData[8];
+	canData[0] = 0x4;
+	canData[4] = (data>>24) & 0xFF;
+	canData[3] = (data>>16) & 0xFF;
+	canData[2] = (data>>8) & 0xFF;
+	canData[1] = data & 0xFF;
+	canData[5] = 0xFF;
+	canData[6] = 0xFF;
+	canData[7] = 0xFF;
+	MAIN_sendCan(canData);
+}
+
+void MAIN_CMD_read32(CAN_SWObj *cur_msg) {
+	uword address = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16) | (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
+	uword address_value = *(uword *)address;
+	ubyte canData[8];
+	canData[0] = 0x2;
+	canData[4] = (address_value>>24) & 0xFF;
+	canData[3] = (address_value>>16) & 0xFF;
+	canData[2] = (address_value>>8) & 0xFF;
+	canData[1] = address_value & 0xFF;
+	canData[5] = 0xFF;
+	canData[6] = 0xFF;
+	canData[7] = 0xFF;
+	MAIN_sendCan(canData);
+}
+
 void MAIN_processMessage(CAN_SWObj *cur_msg) {
-	switch(cur_msg->ubData[0]) {
-	case 0x1: // Read Device ID
-	{
-		ubyte i;
-		ubyte canData[8];
-		ubyte *device_id = (ubyte *)0xD0000000;
-		canData[0] = 0x1;
-		canData[1] = 0x0;
-		for(i = 0; i < 6; i++) {
-			canData[i + 2] = device_id[i];
+	switch(boot.status) {
+		case WAIT_COMMAND:
+		{
+			boot.command = cur_msg->ubData[0];
+			switch(boot.command) {
+				case READ_DEVICEID: // Read Device ID
+				{
+					MAIN_CMD_readDeviceId();
+					break;
+				}
+				case READ_MEM32: // Read32 from Arbitrary Address
+				{
+					MAIN_CMD_read32(cur_msg);
+					break;
+				}
+				case WRITE_MEM32: // Write32 to Arbitrary Address
+				{
+					MAIN_CMD_write32SetAddress(cur_msg);
+					break;
+				}
+				default:
+				{
+					break;
+				}
+			}
+			break;
 		}
-		MAIN_sendCan(canData);
-		canData[1] = 0x1;
-		for(i = 0; i < 6; i++) {
-			canData[i + 2] = device_id[i + 6];
+		case WAIT_WRITE32_DATA:
+		{
+			boot.command = cur_msg->ubData[0];
+			switch(boot.command) {
+				case WRITE_MEM32:
+				{
+					MAIN_CMD_write32SetData(cur_msg);
+					break;
+				}
+				default:
+				{
+					ubyte canData[8];
+					canData[0] = 0x4F;
+					canData[4] = 0xFF;
+					canData[3] = 0xFF;
+					canData[2] = 0xFF;
+					canData[1] = 0xFF;
+					canData[5] = 0xFF;
+					canData[6] = 0xFF;
+					canData[7] = 0xFF;
+					MAIN_sendCan(canData);
+					break;
+				}
+			}
+			boot.address = 0;
+			boot.status = WAIT_COMMAND;
+			break;
 		}
-		MAIN_sendCan(canData);
-		break;
-	}
-	case 0x2: // Read32 from Arbitrary Address
-	{
-		uword address = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16) | (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
-		uword address_value = *(uword *)address;
-		ubyte canData[8];
-		canData[0] = 0x2;
-		canData[4] = (address_value>>24) & 0xFF;
-		canData[3] = (address_value>>16) & 0xFF;
-		canData[2] = (address_value>>8) & 0xFF;
-		canData[1] = address_value & 0xFF;
-		canData[5] = 0xFF;
-		canData[6] = 0xFF;
-		canData[7] = 0xFF;
-		MAIN_sendCan(canData);
-		break;
-	}
-	default:
-		break;
+		default:
+		{
+			break;
+		}
 	}
 }
 
 sword main(void)
 {
+
   MAIN_vInit();
   CAN_SWObj cur_msg;
+  memset(&boot, 0x00, sizeof(struct bootloader_state));
   do {
 	  if(CAN_ubNewData(0)) { // check for new message
 		  CAN_vGetMsgObj(0, &cur_msg); // copy and free to allow next msg into slot

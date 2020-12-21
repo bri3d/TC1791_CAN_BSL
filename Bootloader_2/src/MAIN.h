@@ -206,13 +206,35 @@ void MAIN_vWriteWDTCON0(uword uwValue);
 
 #include  <TC1791.h> 
 #include  <machine/intrinsics.h>
-#include  <machine/cint.h> 
+#include  <machine/cint.h>
+#include  <string.h>
 #include  <sys/types.h> 
 #include  "CAN.h"
 
 // USER CODE BEGIN (MAIN_Header,10)
 
 // USER CODE END
+
+enum CAN_COMMAND {
+	READ_DEVICEID = 1,
+	READ_MEM32 = 2,
+	WRITE_MEM32 = 3,
+	UNLOCK_PASSWORD = 4
+};
+
+enum CURRENT_STATUS {
+	WAIT_COMMAND = 0,
+	WAIT_WRITE32_DATA = 1,
+	WAIT_WRITEPAGE_DATA = 2,
+	WAIT_PASSWORD_DATA = 3
+};
+
+struct bootloader_state {
+	enum CURRENT_STATUS status;
+	enum CAN_COMMAND command;
+	uword address;
+	ubyte len[2];
+};
 
 
 #endif  // ifndef _MAIN_H_
