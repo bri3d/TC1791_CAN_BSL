@@ -212,6 +212,7 @@ void MAIN_vWriteWDTCON0(uword uwValue)
 }
 
 struct bootloader_state boot;
+struct password_cmd_state passwordCmdState;
 
 void MAIN_sendCan(ubyte canData[]) {
 	while(CAN_ubRequestMsgObj(1) != 1);
@@ -219,6 +220,11 @@ void MAIN_sendCan(ubyte canData[]) {
 	CAN_vTransmit(1);
 }
 
+/*
+ * 0x1: readDevice ID
+ * Takes no arguments
+ * Returns first 12 bytes of RAM, populated with Device ID from Configuration Sector by the BootROM.
+ */
 void MAIN_CMD_readDeviceId() {
 	ubyte i;
 	ubyte canData[8];
@@ -236,6 +242,32 @@ void MAIN_CMD_readDeviceId() {
 	MAIN_sendCan(canData);
 }
 
+/*
+ * 0x2: Read32.
+ * Uses bytes 1-4 to set the address to read from.
+ * Returns the value from performing a direct Tricore bus read to the read address. This can be RAM, a register, or an address in Flash if it is unlocked and in read mode.
+ */
+void MAIN_CMD_read32(CAN_SWObj *cur_msg) {
+	uword address = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16) | (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
+	uword address_value = *(uword *)address;
+	ubyte canData[8];
+	canData[0] = 0x2;
+	canData[4] = (address_value>>24) & 0xFF;
+	canData[3] = (address_value>>16) & 0xFF;
+	canData[2] = (address_value>>8) & 0xFF;
+	canData[1] = address_value & 0xFF;
+	canData[5] = 0xFF;
+	canData[6] = 0xFF;
+	canData[7] = 0xFF;
+	MAIN_sendCan(canData);
+}
+
+/*
+ * 0x4 : write32SetAddress
+ * Uses bytes 1-4 to set the address pointer for a Write32 command.
+ * Expects a subsequent 0x4 command with the data.
+ * Places the read loop in a wait state to wait for the subsequent 0x4 command.
+ */
 void MAIN_CMD_write32SetAddress(CAN_SWObj *cur_msg) {
 	uword address = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16) | (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
 	ubyte canData[8];
@@ -251,7 +283,11 @@ void MAIN_CMD_write32SetAddress(CAN_SWObj *cur_msg) {
 	boot.address = address;
 	boot.status = WAIT_WRITE32_DATA;
 }
-
+/*
+ * 0x4 : write32SetData
+ * Uses bytes 1-4 to set the data value for a Write32 command, and performs the write
+ * Only called when read loop was already in a wait state to wait for the subsequent 0x4 command after write32SetAddress
+ */
 void MAIN_CMD_write32SetData(CAN_SWObj *cur_msg) {
 	uword data = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16) | (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
 	*(uword *)boot.address = data;
@@ -267,20 +303,60 @@ void MAIN_CMD_write32SetData(CAN_SWObj *cur_msg) {
 	MAIN_sendCan(canData);
 }
 
-void MAIN_CMD_read32(CAN_SWObj *cur_msg) {
-	uword address = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16) | (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
-	uword address_value = *(uword *)address;
+/*
+ * 0x5: unlockPasswordSetFirstPassword
+ * Uses bytes 1-4 to set the first flash password value.
+ * Uses byte 5 to set the "read" or "write" mode to be unlocked.
+ * Uses byte 6 to set which UCB block the passwords are for.
+ * Uses byte 7 to specify which flash controller to use.
+ * Places the read loop in a wait state to wait for the next 0x5 command containing the second password.
+ */
+void MAIN_CMD_unlockPasswordSetFirstPassword(CAN_SWObj *cur_msg) {
+	uword firstPassword = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16) | (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
+	ubyte readOrWrite = cur_msg->ubData[5];
+	ubyte whichUCB = cur_msg->ubData[6];
+	ubyte whichController = cur_msg->ubData[7];
 	ubyte canData[8];
-	canData[0] = 0x2;
-	canData[4] = (address_value>>24) & 0xFF;
-	canData[3] = (address_value>>16) & 0xFF;
-	canData[2] = (address_value>>8) & 0xFF;
-	canData[1] = address_value & 0xFF;
+	canData[0] = 0x5;
+	canData[4] = (firstPassword>>24) & 0xFF;
+	canData[3] = (firstPassword>>16) & 0xFF;
+	canData[2] = (firstPassword>>8) & 0xFF;
+	canData[1] = firstPassword & 0xFF;
+	canData[5] = 0xFF;
+	canData[6] = 0xFF;
+	canData[7] = 0xFF;
+	MAIN_sendCan(canData);
+	passwordCmdState.whichUCB = whichUCB;
+	passwordCmdState.readOrWrite = readOrWrite;
+	passwordCmdState.firstPassword = firstPassword;
+	passwordCmdState.whichController = whichController;
+	boot.status = WAIT_PASSWORD_DATA;
+}
+
+/*
+ * 0x5: unlockPassword
+ * Uses bytes 1-4 to set the second flash password value.
+ * Performs the unlock procedure.
+ * Returns the flash status register content.
+ */
+void MAIN_CMD_unlockPassword(CAN_SWObj *cur_msg) {
+	uword secondPassword = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16) | (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
+	uword baseAddress = (passwordCmdState.whichController > 0) ? 0x80800000 : 0x80000000;
+	FLASH_sendPasswords(passwordCmdState.readOrWrite, baseAddress, passwordCmdState.firstPassword, secondPassword, passwordCmdState.whichUCB);
+	FLASHn_FSR_t *flashFSR = (passwordCmdState.whichController > 0) ? &FLASH1_FSR : &FLASH0_FSR;
+	uword flashStatus = flashFSR->reg;
+	ubyte canData[8];
+	canData[0] = 0x5;
+	canData[4] = (flashStatus>>24) & 0xFF;
+	canData[3] = (flashStatus>>16) & 0xFF;
+	canData[2] = (flashStatus>>8) & 0xFF;
+	canData[1] = flashStatus & 0xFF;
 	canData[5] = 0xFF;
 	canData[6] = 0xFF;
 	canData[7] = 0xFF;
 	MAIN_sendCan(canData);
 }
+
 
 void MAIN_processMessage(CAN_SWObj *cur_msg) {
 	switch(boot.status) {
@@ -303,6 +379,9 @@ void MAIN_processMessage(CAN_SWObj *cur_msg) {
 					MAIN_CMD_write32SetAddress(cur_msg);
 					break;
 				}
+				case UNLOCK_PASSWORD: // Send UNLOCK command to Flash controller
+					MAIN_CMD_unlockPasswordSetFirstPassword(cur_msg);
+					break;
 				default:
 				{
 					break;
@@ -323,6 +402,34 @@ void MAIN_processMessage(CAN_SWObj *cur_msg) {
 				{
 					ubyte canData[8];
 					canData[0] = 0x4F;
+					canData[4] = 0xFF;
+					canData[3] = 0xFF;
+					canData[2] = 0xFF;
+					canData[1] = 0xFF;
+					canData[5] = 0xFF;
+					canData[6] = 0xFF;
+					canData[7] = 0xFF;
+					MAIN_sendCan(canData);
+					break;
+				}
+			}
+			boot.address = 0;
+			boot.status = WAIT_COMMAND;
+			break;
+		}
+		case WAIT_PASSWORD_DATA:
+		{
+			boot.command = cur_msg->ubData[0];
+			switch(boot.command) {
+				case UNLOCK_PASSWORD:
+				{
+					MAIN_CMD_unlockPassword(cur_msg);
+					break;
+				}
+				default:
+				{
+					ubyte canData[8];
+					canData[0] = 0x5F;
 					canData[4] = 0xFF;
 					canData[3] = 0xFF;
 					canData[2] = 0xFF;

@@ -5,14 +5,17 @@
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
 ../src/CAN.c \
+../src/FLASH.c \
 ../src/MAIN.c 
 
 OBJS += \
 ./src/CAN.o \
+./src/FLASH.o \
 ./src/MAIN.o 
 
 C_DEPS += \
 ./src/CAN.d \
+./src/FLASH.d \
 ./src/MAIN.d 
 
 

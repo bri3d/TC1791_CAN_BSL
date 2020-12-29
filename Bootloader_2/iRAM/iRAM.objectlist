@@ -1,2 +1,3 @@
 src/CAN.o
+src/FLASH.o
 src/MAIN.o

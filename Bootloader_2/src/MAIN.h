@@ -210,6 +210,7 @@ void MAIN_vWriteWDTCON0(uword uwValue);
 #include  <string.h>
 #include  <sys/types.h> 
 #include  "CAN.h"
+#include  "FLASH.h"
 
 // USER CODE BEGIN (MAIN_Header,10)
 
@@ -234,6 +235,13 @@ struct bootloader_state {
 	enum CAN_COMMAND command;
 	uword address;
 	ubyte len[2];
+};
+
+struct password_cmd_state {
+	uword firstPassword;
+	ubyte whichController;
+	ubyte readOrWrite;
+	ubyte whichUCB;
 };
 
 
