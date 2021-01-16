@@ -220,7 +220,9 @@ enum CAN_COMMAND {
 	READ_DEVICEID = 1,
 	READ_MEM32 = 2,
 	WRITE_MEM32 = 3,
-	UNLOCK_PASSWORD = 4
+	UNLOCK_PASSWORD = 4,
+	ERASE_SECTOR = 5,
+	WRITE_PAGE = 6
 };
 
 enum CURRENT_STATUS {
@@ -242,6 +244,11 @@ struct password_cmd_state {
 	ubyte whichController;
 	ubyte readOrWrite;
 	ubyte whichUCB;
+};
+
+struct write_page_state {
+	uword address;
+	ubyte assemblyBuffer[256];
 };
 
 

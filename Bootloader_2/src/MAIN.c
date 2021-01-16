@@ -213,6 +213,7 @@ void MAIN_vWriteWDTCON0(uword uwValue)
 
 struct bootloader_state boot;
 struct password_cmd_state passwordCmdState;
+struct write_page_state writePageState;
 
 void MAIN_sendCan(ubyte canData[]) {
 	while(CAN_ubRequestMsgObj(1) != 1);
@@ -263,7 +264,7 @@ void MAIN_CMD_read32(CAN_SWObj *cur_msg) {
 }
 
 /*
- * 0x4 : write32SetAddress
+ * 0x3 : write32SetAddress
  * Uses bytes 1-4 to set the address pointer for a Write32 command.
  * Expects a subsequent 0x4 command with the data.
  * Places the read loop in a wait state to wait for the subsequent 0x4 command.
@@ -271,7 +272,7 @@ void MAIN_CMD_read32(CAN_SWObj *cur_msg) {
 void MAIN_CMD_write32SetAddress(CAN_SWObj *cur_msg) {
 	uword address = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16) | (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
 	ubyte canData[8];
-	canData[0] = 0x4;
+	canData[0] = 0x3;
 	canData[4] = (address>>24) & 0xFF;
 	canData[3] = (address>>16) & 0xFF;
 	canData[2] = (address>>8) & 0xFF;
@@ -281,10 +282,9 @@ void MAIN_CMD_write32SetAddress(CAN_SWObj *cur_msg) {
 	canData[7] = 0xFF;
 	MAIN_sendCan(canData);
 	boot.address = address;
-	boot.status = WAIT_WRITE32_DATA;
 }
 /*
- * 0x4 : write32SetData
+ * 0x3 : write32SetData
  * Uses bytes 1-4 to set the data value for a Write32 command, and performs the write
  * Only called when read loop was already in a wait state to wait for the subsequent 0x4 command after write32SetAddress
  */
@@ -292,7 +292,7 @@ void MAIN_CMD_write32SetData(CAN_SWObj *cur_msg) {
 	uword data = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16) | (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
 	*(uword *)boot.address = data;
 	ubyte canData[8];
-	canData[0] = 0x4;
+	canData[0] = 0x3;
 	canData[4] = (data>>24) & 0xFF;
 	canData[3] = (data>>16) & 0xFF;
 	canData[2] = (data>>8) & 0xFF;
@@ -304,7 +304,7 @@ void MAIN_CMD_write32SetData(CAN_SWObj *cur_msg) {
 }
 
 /*
- * 0x5: unlockPasswordSetFirstPassword
+ * 0x4: unlockPasswordSetFirstPassword
  * Uses bytes 1-4 to set the first flash password value.
  * Uses byte 5 to set the "read" or "write" mode to be unlocked.
  * Uses byte 6 to set which UCB block the passwords are for.
@@ -317,7 +317,7 @@ void MAIN_CMD_unlockPasswordSetFirstPassword(CAN_SWObj *cur_msg) {
 	ubyte whichUCB = cur_msg->ubData[6];
 	ubyte whichController = cur_msg->ubData[7];
 	ubyte canData[8];
-	canData[0] = 0x5;
+	canData[0] = 0x4;
 	canData[4] = (firstPassword>>24) & 0xFF;
 	canData[3] = (firstPassword>>16) & 0xFF;
 	canData[2] = (firstPassword>>8) & 0xFF;
@@ -330,11 +330,10 @@ void MAIN_CMD_unlockPasswordSetFirstPassword(CAN_SWObj *cur_msg) {
 	passwordCmdState.readOrWrite = readOrWrite;
 	passwordCmdState.firstPassword = firstPassword;
 	passwordCmdState.whichController = whichController;
-	boot.status = WAIT_PASSWORD_DATA;
 }
 
 /*
- * 0x5: unlockPassword
+ * 0x4: unlockPassword
  * Uses bytes 1-4 to set the second flash password value.
  * Performs the unlock procedure.
  * Returns the flash status register content.
@@ -344,6 +343,31 @@ void MAIN_CMD_unlockPassword(CAN_SWObj *cur_msg) {
 	uword baseAddress = (passwordCmdState.whichController > 0) ? 0x80800000 : 0x80000000;
 	FLASH_sendPasswords(passwordCmdState.readOrWrite, baseAddress, passwordCmdState.firstPassword, secondPassword, passwordCmdState.whichUCB);
 	FLASHn_FSR_t *flashFSR = (passwordCmdState.whichController > 0) ? &FLASH1_FSR : &FLASH0_FSR;
+	uword flashStatus = flashFSR->reg;
+	ubyte canData[8];
+	canData[0] = 0x4;
+	canData[4] = (flashStatus>>24) & 0xFF;
+	canData[3] = (flashStatus>>16) & 0xFF;
+	canData[2] = (flashStatus>>8) & 0xFF;
+	canData[1] = flashStatus & 0xFF;
+	canData[5] = 0xFF;
+	canData[6] = 0xFF;
+	canData[7] = 0xFF;
+	MAIN_sendCan(canData);
+}
+
+/*
+ * 0x5: eraseFlashSector
+ * Uses bytes 1-4 to set the address to erase.
+ * Erases the sector.
+ * Returns the flash status register content.
+ */
+void MAIN_CMD_eraseFlashSector(CAN_SWObj *cur_msg) {
+	uword address = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16) | (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
+	uword baseAddress = (address >= 0x80800000) ? 0x80800000 : 0x80000000;
+	uword whichController = (address >= 0x80800000);
+	FLASHn_FSR_t *flashFSR = (whichController > 0) ? &FLASH1_FSR : &FLASH0_FSR;
+	FLASH_eraseSector(flashFSR, baseAddress, address);
 	uword flashStatus = flashFSR->reg;
 	ubyte canData[8];
 	canData[0] = 0x5;
@@ -357,6 +381,20 @@ void MAIN_CMD_unlockPassword(CAN_SWObj *cur_msg) {
 	MAIN_sendCan(canData);
 }
 
+void MAIN_CMD_writeFlashPage(CAN_SWObj *cur_msg) {
+	uword address = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16) | (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
+	writePageState.address = address;
+	ubyte canData[8];
+	canData[0] = 0x6;
+	canData[4] = (address>>24) & 0xFF;
+	canData[3] = (address>>16) & 0xFF;
+	canData[2] = (address>>8) & 0xFF;
+	canData[1] = address & 0xFF;
+	canData[5] = 0xFF;
+	canData[6] = 0xFF;
+	canData[7] = 0xFF;
+	MAIN_sendCan(canData);
+}
 
 void MAIN_processMessage(CAN_SWObj *cur_msg) {
 	switch(boot.status) {
@@ -377,11 +415,18 @@ void MAIN_processMessage(CAN_SWObj *cur_msg) {
 				case WRITE_MEM32: // Write32 to Arbitrary Address
 				{
 					MAIN_CMD_write32SetAddress(cur_msg);
+					boot.status = WAIT_WRITE32_DATA;
 					break;
 				}
 				case UNLOCK_PASSWORD: // Send UNLOCK command to Flash controller
 					MAIN_CMD_unlockPasswordSetFirstPassword(cur_msg);
+					boot.status = WAIT_PASSWORD_DATA;
 					break;
+				case ERASE_SECTOR:
+					MAIN_CMD_eraseFlashSector(cur_msg);
+					break;
+				case WRITE_PAGE:
+					MAIN_CMD_write
 				default:
 				{
 					break;
