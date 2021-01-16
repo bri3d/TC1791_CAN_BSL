@@ -426,7 +426,8 @@ void MAIN_processMessage(CAN_SWObj *cur_msg) {
 					MAIN_CMD_eraseFlashSector(cur_msg);
 					break;
 				case WRITE_PAGE:
-					MAIN_CMD_write
+					MAIN_CMD_writeFlashPage(cur_msg);
+					break;
 				default:
 				{
 					break;
