@@ -381,9 +381,16 @@ void MAIN_CMD_eraseFlashSector(CAN_SWObj *cur_msg) {
 	MAIN_sendCan(canData);
 }
 
+/*
+ * 0x5: writeFlashPage
+ * Uses bytes 1-4 to set the address to be written.
+ * Configures the state of the BSL to await 256 bytes of page data to write to the Page.
+ * Returns the address.
+ */
 void MAIN_CMD_writeFlashPage(CAN_SWObj *cur_msg) {
 	uword address = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16) | (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
 	writePageState.address = address;
+	writePageState.cursor = 0;
 	ubyte canData[8];
 	canData[0] = 0x6;
 	canData[4] = (address>>24) & 0xFF;
@@ -394,6 +401,36 @@ void MAIN_CMD_writeFlashPage(CAN_SWObj *cur_msg) {
 	canData[6] = 0xFF;
 	canData[7] = 0xFF;
 	MAIN_sendCan(canData);
+}
+
+ubyte MAIN_CMD_writeFlashPageData(CAN_SWObj *cur_msg) {
+	int i = 1;
+	for (i = 1; i < 8; i++) {
+		writePageState.assemblyBuffer[writePageState.cursor] = cur_msg->ubData[i];
+		if(writePageState.cursor == 255) {
+			break;
+		}
+		writePageState.cursor += 1;
+		i += 1;
+	}
+	if (writePageState.cursor == 255) {
+		uword baseAddress = (writePageState.address >= 0x80800000) ? 0x80800000 : 0x80000000;
+		uword whichController = (writePageState.address >= 0x80800000);
+		FLASHn_FSR_t *flashFSR = (whichController > 0) ? &FLASH1_FSR : &FLASH0_FSR;
+		FLASH_writePage(flashFSR, baseAddress, writePageState.address, writePageState.assemblyBuffer);
+		ubyte canData[8];
+		canData[0] = 0x6;
+		canData[4] = 0x00;
+		canData[3] = 0x00;
+		canData[2] = 0x00;
+		canData[1] = 0x00;
+		canData[5] = 0xFF;
+		canData[6] = 0xFF;
+		canData[7] = 0xFF;
+		MAIN_sendCan(canData);
+		return 1;
+	}
+	return 0;
 }
 
 void MAIN_processMessage(CAN_SWObj *cur_msg) {
@@ -427,6 +464,7 @@ void MAIN_processMessage(CAN_SWObj *cur_msg) {
 					break;
 				case WRITE_PAGE:
 					MAIN_CMD_writeFlashPage(cur_msg);
+					boot.status = WAIT_WRITEPAGE_DATA;
 					break;
 				default:
 				{
@@ -489,6 +527,35 @@ void MAIN_processMessage(CAN_SWObj *cur_msg) {
 			}
 			boot.address = 0;
 			boot.status = WAIT_COMMAND;
+			break;
+		}
+		case WAIT_WRITEPAGE_DATA:
+		{
+			boot.command = cur_msg->ubData[0];
+			switch(boot.command) {
+				case WRITE_PAGE:
+				{
+					if(MAIN_CMD_writeFlashPageData(cur_msg) > 0) {
+						boot.status = WAIT_COMMAND;
+					}
+					break;
+				}
+				default:
+				{
+					boot.status = WAIT_COMMAND;
+					ubyte canData[8];
+					canData[0] = 0x6F;
+					canData[4] = 0xFF;
+					canData[3] = 0xFF;
+					canData[2] = 0xFF;
+					canData[1] = 0xFF;
+					canData[5] = 0xFF;
+					canData[6] = 0xFF;
+					canData[7] = 0xFF;
+					MAIN_sendCan(canData);
+					break;
+				}
+			}
 			break;
 		}
 		default:

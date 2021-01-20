@@ -248,6 +248,7 @@ struct password_cmd_state {
 
 struct write_page_state {
 	uword address;
+	uword cursor;
 	ubyte assemblyBuffer[256];
 };
 
