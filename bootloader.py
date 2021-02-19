@@ -5,6 +5,7 @@ import math
 from tqdm import tqdm
 import struct
 import time
+import pigpio
 
 sector_map_tc1791 = { # Sector lengths for PMEM routines
     0: 0x4000,
@@ -40,9 +41,76 @@ def bits(byte):
 can_interface = 'can0'
 bus = can.interface.Bus(can_interface, bustype='socketcan')
 
+def sboot_pwm():
+    import time
+    import pigpio
+    import wavePWM
+
+    GPIO=[12, 13]
+
+    pi = pigpio.pi()
+
+    if not pi.connected:
+       exit(0)
+
+    pwm = wavePWM.PWM(pi) # Use default frequency
+
+    pwm.set_frequency(3210)
+    cl = pwm.get_cycle_length()
+    pwm.set_pulse_start_in_micros(13, cl/1)
+    pwm.set_pulse_length_in_micros(13, cl/2)
+
+    pwm.set_pulse_start_in_micros(12, 3*cl/4)
+    pwm.set_pulse_length_in_micros(12, cl/4)
+    pwm.update()
+    return pwm
+
+def reset_ecu():
+    pi = pigpio.pi() 
+    pi.set_mode(20, pigpio.OUTPUT)
+    pi.set_pull_up_down(20, pigpio.PUD_DOWN) 
+    pi.write(20, 1)
+    time.sleep(0.02)
+    pi.write(20, 0)
+    pi.set_mode(20, pigpio.INPUT)
+    pi.set_pull_up_down(20, pigpio.PUD_OFF) 
+
+def sboot_shell():
+    print("Setting up PWM waveforms...")
+    pwm = sboot_pwm()
+    print("Resetting ECU into Supplier Bootloader...")
+    reset_ecu()
+    print("Sending 59 45...")
+    bus.send(Message(data=[0x59,0x45], arbitration_id=0x7E0, is_extended_id=False))
+    stage2 = False
+    while True:
+        message = bus.recv()
+        if (message is not None and message.arbitration_id == 0x7E8 and message.data[0] == 0xA0):
+            print("Got A0 message...")
+            if(stage2):
+                 print("Done!")
+                 break
+            print("Sending 6B...")
+            stage2 = True
+            bus.send(Message(data=[0x6B], arbitration_id=0x7E0, is_extended_id=False))
+        if (message is not None and message.arbitration_id == 0x0A7):
+            print("FAILURE")
+            break
+
+    pwm.cancel()
+
 # Enter REPL
 
 def upload_bsl():
+    print("Resetting ECU into HWCFG BSL Mode...")
+    pi = pigpio.pi() 
+    pi.set_mode(21, pigpio.OUTPUT)
+    pi.set_pull_up_down(21, pigpio.PUD_DOWN) 
+    pi.write(21, 0)
+    reset_ecu()
+    time.sleep(0.5)
+    pi.set_mode(21, pigpio.INPUT)
+    pi.set_pull_up_down(21, pigpio.PUD_OFF) 
     print("Sending BSL initialization message...")
     # send bootloader.bin to CAN BSL in Tricore
     bootloader_data = open("bootloader.bin", 'rb').read()
@@ -51,8 +119,8 @@ def upload_bsl():
     data += [0x0, 0x3] # 0x300 CAN ID for Data -> 0xC0 after right shift
     init_message = Message(is_extended_id=False, dlc=8, arbitration_id=0x100,data=data) # 0x55 0x55 = magic for init, 0x00 0x1 = 0x100 CAN ID, 0x1 0x0 = 1 packet data, 0x00, 0x3 = 0x300 transfer data can id
     success = False
+    bus.send(init_message)
     while(success == False):
-        bus.send(init_message)
         message = bus.recv(0.5)
         if(message is not None and not message.is_error_frame):
             if(message.arbitration_id == 0x40):
@@ -221,6 +289,10 @@ class BootloaderRepl(cmd.Cmd):
         'dumpmem <addr> <size> <filename>: Dump <addr> to <filename> with <size> bytes'
         args = arg.split()
         read_bytes_file(int(args[0], 16), int(args[1], 16), args[2])
+
+    def do_sboot(self, arg):
+        'reset into SBOOT command shell'
+        sboot_shell()
 
     def do_bye(self, arg):
         'Exit'
