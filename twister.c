@@ -191,7 +191,7 @@ int main(int argc, char *argv[])
       }
     }
 
-    printf("\nSeed Value (PRNG Data): \n");
+    printf("\nKey Value (PRNG Data): \n");
     unsigned char *rand_data_bytes = (unsigned char *)rand_data;
     for(j=0; j<256; j++) {
       printf(" %02X%s", rand_data_bytes[j], (j%4)==4 ? " " : "");
@@ -203,7 +203,7 @@ int main(int argc, char *argv[])
     BN_mod_exp(out, data_num, e, n, ctx);
     unsigned char rsa_output[256];
     BN_bn2binpad(out, rsa_output, 256);
-    printf("\nKey Value (Crypted PRNG Data): \n");
+    printf("\nSeed Value (Crypted PRNG Data): \n");
     for(j=0; j<256; j++) {
       printf(" %02X%s", rsa_output[j], (j%4)==4 ? " " : "");
     }
