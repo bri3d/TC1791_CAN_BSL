@@ -138,7 +138,47 @@ def sboot_crc_reset():
     send_data = bytes([0x78, 0x00, 0x00, 0x00, 0x10, 0x30, 0x01, 0x01, 0xB0])
     conn.send(send_data)
     print(conn.wait_frame().hex())
-    print("Starting CRC...")
+    print("Uploading valid part number for part correlation validator")
+    send_data = bytes(
+        [
+            0x78,
+            0x00,
+            0x00,
+            0x00,
+            0x14,
+            0x4E,
+            0x42,
+            0x30,
+            0xD1,
+            0x00,
+            0x00,
+            0x53,
+            0x43,
+            0x38,
+            0x34,
+            0x30,
+            0x2D,
+            0x31,
+            0x30,
+            0x32,
+            0x36,
+            0x31,
+            0x39,
+            0x39,
+            0x31,
+            0x41,
+            0x41,
+            0x2D,
+            0x2D,
+            0x2D,
+            0x2D,
+            0x2D,
+            0x2D,
+        ]
+    )
+    conn.send(send_data)
+    print(conn.wait_frame().hex())
+    print("Starting Validator and rebooting into BSL...")
     conn.send(bytes([0x79]))
     print(conn.wait_frame().hex())
     conn.close()
@@ -216,8 +256,6 @@ def upload_bsl():
         if message is not None and not message.is_error_frame:
             if message.arbitration_id == 0x40:
                 success = True
-            else:
-                print("Got unexpected CAN response, please check CFG pins...")
     print("Sending BSL data...")
     for block_base_address in tqdm(
         range(0, len(bootloader_data), 8), unit_scale=True, unit="blocks"
