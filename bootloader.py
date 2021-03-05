@@ -181,10 +181,10 @@ def sboot_crc_reset(crc_start_address):
     conn.send(bytes([0x79]))
     time.sleep(0.0004)
     upload_bsl(True)
-    crc_address = read_byte(0xD0010770)
+    crc_address = read_byte(0xD0010770 .to_bytes(4, "big"))
     print("CRC Address Reached: ")
     print(crc_address.hex())
-    crc_data = read_byte(0xD0010778)
+    crc_data = read_byte(0xD0010778 .to_bytes(4, "big"))
     print("CRC32 Current Value: ")
     print(crc_data.hex())
 
@@ -331,6 +331,39 @@ def write_byte(addr, value):
         return False
     else:
         return True
+
+
+def send_read_passwords(pw1, pw2):
+    data = bytearray([0x04])
+    data += pw1
+    data += bytearray([0x8, 0x0, 0x0])
+    message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300, data=data)
+    bus.send(message)
+    byte_data = bytearray()
+    message = bus.recv()
+    print(message)
+    data = bytearray([0x04])
+    data += pw2
+    data += bytearray([0x0, 0x0, 0x0])
+    message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300, data=data)
+    bus.send(message)
+    message = bus.recv()
+    print(message)
+    data = bytearray([0x04])
+    data += pw1
+    data += bytearray([0x8, 0x0, 0x1])
+    message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300, data=data)
+    bus.send(message)
+    byte_data = bytearray()
+    message = bus.recv()
+    print(message)
+    data = bytearray([0x04])
+    data += pw2
+    data += bytearray([0x0, 0x0, 0x0])
+    message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300, data=data)
+    bus.send(message)
+    message = bus.recv()
+    print(message)
 
 
 def print_enabled_disabled(string, value):
@@ -482,8 +515,16 @@ class BootloaderRepl(cmd.Cmd):
 
     def do_sboot_crc_reset(self, arg):
         "sboot_crc_reset <address>: Configure SBOOT with CRC header pointed to <address>, reboot"
+        args = arg.split()
         password_address = bytearray.fromhex(args[0])
         sboot_crc_reset(password_address)
+
+    def do_send_read_passwords(self, arg):
+        "send_read_passwords <pw1> <pw2>: unlock Flash using passwords"
+        args = arg.split()
+        pw1 = int.from_bytes(bytearray.fromhex(args[0]), "big").to_bytes(4, "little")
+        pw2 = int.from_bytes(bytearray.fromhex(args[1]), "big").to_bytes(4, "little")
+        send_read_passwords(pw1, pw2)
 
     def do_bye(self, arg):
         "Exit"
