@@ -333,10 +333,10 @@ def write_byte(addr, value):
         return True
 
 
-def send_read_passwords(pw1, pw2):
+def send_passwords(pw1, pw2, ucb=0, read_write=0x8):
     data = bytearray([0x04])
     data += pw1
-    data += bytearray([0x8, 0x0, 0x0])
+    data += bytearray([read_write, ucb, 0x0])
     message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300, data=data)
     bus.send(message)
     byte_data = bytearray()
@@ -351,7 +351,7 @@ def send_read_passwords(pw1, pw2):
     print(message)
     data = bytearray([0x04])
     data += pw1
-    data += bytearray([0x8, 0x0, 0x1])
+    data += bytearray([read_write, ucb, 0x1])
     message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300, data=data)
     bus.send(message)
     byte_data = bytearray()
@@ -364,6 +364,15 @@ def send_read_passwords(pw1, pw2):
     bus.send(message)
     message = bus.recv()
     print(message)
+
+
+def erase_sector(address):
+    data = bytearray([0x05])
+    data += address
+    data += bytearray([0, 0, 0])
+    message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300, data=data)
+    bus.send(message)
+    message = bus.recv()
 
 
 def print_enabled_disabled(string, value):
@@ -418,6 +427,15 @@ def read_flash_properties(flash_num, pmu_base_addr):
     print_enabled_disabled(pmem_string + " Write Protection User 0: ", flash_status[5])
     print_enabled_disabled(pmem_string + " Write Protection User 1: ", flash_status[6])
     print_enabled_disabled(pmem_string + " OTP Installation: ", flash_status[7])
+
+    flash_status_write = bits(fsr_value[3])
+    print_enabled_disabled(
+        pmem_string + " Write Protection User 0 Inhibit: ", flash_status_write[1]
+    )
+    print_enabled_disabled(
+        pmem_string + " Write Protection User 1 Inhibit: ", flash_status_write[2]
+    )
+
     protection_status = bits(fcon_value[2])
     print_enabled_disabled(pmem_string + " Read Protection: ", protection_status[0])
     print_enabled_disabled(
@@ -524,7 +542,19 @@ class BootloaderRepl(cmd.Cmd):
         args = arg.split()
         pw1 = int.from_bytes(bytearray.fromhex(args[0]), "big").to_bytes(4, "little")
         pw2 = int.from_bytes(bytearray.fromhex(args[1]), "big").to_bytes(4, "little")
-        send_read_passwords(pw1, pw2)
+        send_passwords(pw1, pw2)
+
+    def do_send_write_passwords(self, arg):
+        "send_write_passwords <pw1> <pw2>: unlock Flash using passwords"
+        args = arg.split()
+        pw1 = int.from_bytes(bytearray.fromhex(args[0]), "big").to_bytes(4, "little")
+        pw2 = int.from_bytes(bytearray.fromhex(args[1]), "big").to_bytes(4, "little")
+        send_passwords(pw1, pw2, read_write=0x05, ucb=1)
+
+    def do_erase_sector(self, arg):
+        "erase_sector <addr> : Erase sector beginning with address"
+        byte_specifier = bytearray.fromhex(arg)
+        erase_sector(byte_specifier)
 
     def do_bye(self, arg):
         "Exit"
