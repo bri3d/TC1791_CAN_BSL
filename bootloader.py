@@ -110,7 +110,7 @@ def sboot_sendkey(key_data):
     conn.close()
 
 
-def sboot_crc_reset():
+def sboot_crc_reset(crc_start_address):
     prepare_upload_bsl()
     conn = get_isotp_conn()
     print("Setting initial CRC to 0x0")
@@ -125,8 +125,12 @@ def sboot_crc_reset():
     send_data = bytes([0x78, 0x00, 0x00, 0x00, 0x08, 0x01, 0x00, 0x00, 0x00])
     conn.send(send_data)
     print(conn.wait_frame().hex())
-    print("Setting start CRC start address to boot passwords at 0x8001420C")
-    send_data = bytes([0x78, 0x00, 0x00, 0x00, 0x0C, 0x0C, 0x42, 0x01, 0x80])
+    print(
+        "Setting start CRC start address to boot passwords at "
+        + crc_start_address.hex()
+    )
+    send_data = bytearray([0x78, 0x00, 0x00, 0x00, 0x0C])
+    send_data.extend(int.from_bytes(crc_start_address, "big").to_bytes(4, "little"))
     conn.send(send_data)
     print(conn.wait_frame().hex())
     print("Setting start CRC end address to a valid area at 0xb0010130")
@@ -471,14 +475,15 @@ class BootloaderRepl(cmd.Cmd):
         sboot_shell()
 
     def do_sboot_sendkey(self, arg):
-        "Send Key Data to SBOOT Command Shell"
+        "sboot_sendkey <keydata>: Send Key Data to SBOOT Command Shell"
         args = arg.split()
         key_data = bytearray.fromhex(args[0])
         sboot_sendkey(key_data)
 
     def do_sboot_crc_reset(self, arg):
-        "Configure SBOOT with CRC header pointed to boot passwords, reboot"
-        sboot_crc_reset()
+        "sboot_crc_reset <address>: Configure SBOOT with CRC header pointed to <address>, reboot"
+        password_address = bytearray.fromhex(args[0])
+        sboot_crc_reset(password_address)
 
     def do_bye(self, arg):
         "Exit"
