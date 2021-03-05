@@ -45,6 +45,9 @@ def bits(byte):
 
 can_interface = "can0"
 bus = can.interface.Bus(can_interface, bustype="socketcan")
+pi = pigpio.pi()
+pi.set_mode(23, pigpio.OUTPUT)
+pi.set_pull_up_down(23, pigpio.PUD_UP)
 
 
 def get_isotp_conn():
@@ -58,12 +61,9 @@ def get_isotp_conn():
 
 def sboot_pwm():
     import time
-    import pigpio
     import wavePWM
 
     GPIO = [12, 13]
-
-    pi = pigpio.pi()
 
     if not pi.connected:
         exit(0)
@@ -82,15 +82,9 @@ def sboot_pwm():
 
 
 def reset_ecu():
-    # Pin 23 -> CPU RST pin
-    pi = pigpio.pi()
-    pi.set_mode(23, pigpio.OUTPUT)
-    pi.set_pull_up_down(23, pigpio.PUD_DOWN)
-    pi.write(23, 1)
-    time.sleep(0.05)
     pi.write(23, 0)
-    pi.set_mode(23, pigpio.INPUT)
-    pi.set_pull_up_down(23, pigpio.PUD_OFF)
+    time.sleep(0.01)
+    pi.write(23, 1)
 
 
 def sboot_getseed():
@@ -117,6 +111,7 @@ def sboot_sendkey(key_data):
 
 
 def sboot_crc_reset():
+    prepare_upload_bsl()
     conn = get_isotp_conn()
     print("Setting initial CRC to 0x0")
     send_data = bytes([0x78, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
@@ -180,10 +175,14 @@ def sboot_crc_reset():
     print(conn.wait_frame().hex())
     print("Starting Validator and rebooting into BSL...")
     conn.send(bytes([0x79]))
-    print(conn.wait_frame().hex())
-    conn.close()
-    time.sleep(0.05)
-    upload_bsl()
+    time.sleep(0.0004)
+    upload_bsl(True)
+    crc_address = read_byte(0xD0010770)
+    print("CRC Address Reached: ")
+    print(crc_address.hex())
+    crc_data = read_byte(0xD0010778)
+    print("CRC32 Current Value: ")
+    print(crc_data.hex())
 
 
 def sboot_shell():
@@ -196,6 +195,8 @@ def sboot_shell():
     print("Sending 59 45...")
     stage2 = False
     while True:
+        if stage2 is True:
+            bus.send(Message(data=[0x6B], arbitration_id=0x7E0, is_extended_id=False))
         message = bus.recv(0.01)
         print(message)
         if (
@@ -210,8 +211,6 @@ def sboot_shell():
                 break
             print("Sending 6B...")
             stage2 = True
-            bus.send(Message(data=[0x6B], arbitration_id=0x7E0, is_extended_id=False))
-            bus.send(Message(data=[0x6B], arbitration_id=0x7E0, is_extended_id=False))
         if message is not None and message.arbitration_id == 0x0A7:
             print("FAILURE")
             break
@@ -222,14 +221,17 @@ def sboot_shell():
 # Enter REPL
 
 
-def upload_bsl():
-
+def prepare_upload_bsl():
     # Pin 24 -> BOOT_CFG pin, pulled to GND to enable BSL mode.
     print("Resetting ECU into HWCFG BSL Mode...")
-    pi = pigpio.pi()
     pi.set_mode(24, pigpio.OUTPUT)
     pi.set_pull_up_down(24, pigpio.PUD_DOWN)
     pi.write(24, 0)
+
+
+def upload_bsl(skip_prep=False):
+    if skip_prep == False:
+        prepare_upload_bsl()
     reset_ecu()
     time.sleep(0.1)
     pi.set_mode(24, pigpio.INPUT)
