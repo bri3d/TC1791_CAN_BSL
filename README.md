@@ -17,18 +17,21 @@ Perform these PCB modifications to a Simos18 main board to enter the BSL. A few 
 * The yellow goo isn't bodge wires or something, it's potting sealant from the other side of the PCB that's been pushed through the vias. If you find it ugly it is easy to remove.
 * To open the ECU is very easy. It's held together with a few bent metal tabs and black RTV sealant. Simply bend the metal tabs away and cut through the black RTV sealant and the cover will lift right off. To reinstall is just the opposite.
 * If you have a nicer setup with pogo pins and pullup / pulldown capability, you're in luck!
-* Nothing is timing critical so a jig with programmable GPIO isn't necessary. You can just touch the last config pin to ground by hand while you turn on power, if that's how you roll.
+* If you already have boot passwords, simply using the BSL is not timing critical, you can just pull down the CFG attached to the blue/purple wire when you would like to boot. If you do not, and you need to recover the passwords, you need to attach this blue/purple CFG wire and the CPU RST pin to two Pi GPIO pins. The other CFG modifications can be performed statically.
 
 ![PCB1](Board1.jpg)
 ![PCB2](Board2.jpg)
 ![PCB3](Board3.jpg)
+![RST](RST.jpg)
 
 To communicate, connect the following: 
 
 * + ~13V: Left harness connector pins 6, 50, 86 (6 is one of the large pins, the rest are small).
 * GROUND: 1 (this is the upper-right large pin).
-* CANH: 79
-* CANL: 80
+* CANH: 79, to CAN interface CanH
+* CANL: 80, to CAN interface CanL
+* "PWM1": 66 (only necessary for SBOOT), to a 5V level shifter attached to a Pi GPIO pin.
+* "PWM2": 71 (only necessary for SBOOT), to a 5V level shifter attached to a Pi GPIO pin.
 
 
 # Current tools:
