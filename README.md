@@ -6,9 +6,9 @@ By setting the HWCFG register on Tricore processors to a specific value, the Mas
 
 On AudoMAX, this Bootstrap Loader copies bytes to the beginning of Scratchpad RAM (C0000000) and jumps directly to execution from SPRAM.
 
-Unfortunately, when the BSL is invoked, flash memory is locked by the Tricore user passwords. A mechanism for extracting these passwords exists for various ECUs, including Simos18, but the mechanism exists so far only in commercial tools.
+Unfortunately, when the BSL is invoked, flash memory is locked by the Tricore user passwords. A mechanism for extracting these passwords exists for various ECUs, including Simos18, and a partial implementation is contained here. In tandem with the documentation and `twister` tool available at https://github.com/bri3d/Simos18_SBOOT , a complete "boot mode" / "bench mode" / "boot read passwords" open-source functionality is available for Simos18.
 
-Such extraction is outside of the scope of this BSL code, which only intends to provide unlock/read/write/erase and arbitrary code execution primitives once the passwords are known. If the ECU is not locked by the Immobilizer and is functioning correctly, Simos18 boot passwords can be extracted using the "Write Without Erase" exploit documented [here](https://github.com/bri3d/VW_Flash/blob/master/docs.md) combined with a simple arbitrary read primitive attached to a CAN handler. The passwords are located at 0x8001420C in the OTP area of flash.
+Furthermore, if the ECU is not locked by the Immobilizer and is functioning correctly, Simos18 boot passwords can be extracted using the "Write Without Erase" exploit documented [here](https://github.com/bri3d/VW_Flash/blob/master/docs.md) combined with a simple arbitrary read primitive attached to a CAN handler. The passwords are located at 0x8001420C in the OTP area of flash.
 
 # Documentation
 
