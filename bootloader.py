@@ -6,7 +6,15 @@ from tqdm import tqdm
 import struct
 import time
 import pigpio
+import subprocess
 from udsoncan.connections import IsoTPSocketConnection
+
+TWISTER_PATH = (
+    "../Simos18_SBOOT/twister"
+)  # This is the path to the "twister" binary from https://github.com/bri3d/Simos18_SBOOT
+SEED_START = (
+    "1D00000"
+)  # This is the starting value for the expected timer value range for the Seed/Key calculation.
 
 sector_map_tc1791 = {  # Sector lengths for PMEM routines
     0: 0x4000,
@@ -41,6 +49,23 @@ def bits(byte):
     ]
     bit_arr.reverse()
     return bit_arr
+
+
+def print_success_failure(data):
+    if data[0] is 0xA0:
+        print("Success")
+    else:
+        print("Failure! " + data.hex())
+
+
+def get_key_from_seed(seed_data):
+    p = subprocess.run(
+        [TWISTER_PATH, SEED_START, seed_data, "1"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    output_data = p.stdout.decode("us-ascii")
+    return output_data
 
 
 can_interface = "can0"
@@ -89,55 +114,58 @@ def reset_ecu():
 
 def sboot_getseed():
     conn = get_isotp_conn()
-    print("Sending 0x30")
+    print("Sending 0x30 to elevate SBOOT shell status...")
     conn.send(bytes([0x30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]))
-    print(conn.wait_frame().hex())
+    print_success_failure(conn.wait_frame())
     time.sleep(1)
-    print("Sending 0x54")
+    print("Sending 0x54 Generate Seed...")
     conn.send(bytes([0x54]))
-    print("Seed material is:")
-    print(conn.wait_frame().hex())
+    data = conn.wait_frame()
+    print_success_failure(data)
+    data = data[9:]
     conn.close()
+    return data
 
 
 def sboot_sendkey(key_data):
     conn = get_isotp_conn()
     send_data = bytearray([0x65])
     send_data.extend(key_data)
-    print("Sending 0x65")
+    print("Sending 0x65 Security Access with Key...")
     conn.send(send_data)
-    print(conn.wait_frame().hex())
+    print_success_failure(conn.wait_frame())
     conn.close()
 
 
 def sboot_crc_reset(crc_start_address):
     prepare_upload_bsl()
     conn = get_isotp_conn()
-    print("Setting initial CRC to 0x0")
+    print("Setting initial CRC to 0x0...")
     send_data = bytes([0x78, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
     conn.send(send_data)
-    print(conn.wait_frame().hex())
-    print("Setting expected CRC to 0x0")
+    print_success_failure(conn.wait_frame())
+    print("Setting expected CRC to 0x0...")
     send_data = bytes([0x78, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00])
     conn.send(send_data)
-    print(conn.wait_frame().hex())
-    print("Setting start CRC range count to 1")
+    print_success_failure(conn.wait_frame())
+    print("Setting start CRC range count to 1...")
     send_data = bytes([0x78, 0x00, 0x00, 0x00, 0x08, 0x01, 0x00, 0x00, 0x00])
     conn.send(send_data)
-    print(conn.wait_frame().hex())
+    print_success_failure(conn.wait_frame())
     print(
         "Setting start CRC start address to boot passwords at "
         + crc_start_address.hex()
+        + "..."
     )
     send_data = bytearray([0x78, 0x00, 0x00, 0x00, 0x0C])
     send_data.extend(int.from_bytes(crc_start_address, "big").to_bytes(4, "little"))
     conn.send(send_data)
-    print(conn.wait_frame().hex())
-    print("Setting start CRC end address to a valid area at 0xb0010130")
+    print_success_failure(conn.wait_frame())
+    print("Setting start CRC end address to a valid area at 0xb0010130...")
     send_data = bytes([0x78, 0x00, 0x00, 0x00, 0x10, 0x30, 0x01, 0x01, 0xB0])
     conn.send(send_data)
-    print(conn.wait_frame().hex())
-    print("Uploading valid part number for part correlation validator")
+    print_success_failure(conn.wait_frame())
+    print("Uploading valid part number for part correlation validator...")
     send_data = bytes(
         [
             0x78,
@@ -176,17 +204,18 @@ def sboot_crc_reset(crc_start_address):
         ]
     )
     conn.send(send_data)
-    print(conn.wait_frame().hex())
+    print_success_failure(conn.wait_frame())
     print("Starting Validator and rebooting into BSL...")
     conn.send(bytes([0x79]))
     time.sleep(0.0004)
     upload_bsl(True)
-    crc_address = read_byte(0xD0010770 .to_bytes(4, "big"))
+    crc_address = int.from_bytes(read_byte(0xD0010770 .to_bytes(4, "big")), "little")
     print("CRC Address Reached: ")
-    print(crc_address.hex())
-    crc_data = read_byte(0xD0010778 .to_bytes(4, "big"))
+    print(hex(crc_address))
+    crc_data = int.from_bytes(read_byte(0xD0010778 .to_bytes(4, "big")), "little")
     print("CRC32 Current Value: ")
-    print(crc_data.hex())
+    print(hex(crc_data))
+    conn.close()
 
 
 def sboot_shell():
@@ -208,10 +237,10 @@ def sboot_shell():
             and message.arbitration_id == 0x7E8
             and message.data[0] == 0xA0
         ):
-            print("Got A0 message...")
+            print("Got A0 message")
             if stage2:
                 print("Switching to IsoTP Socket...")
-                sboot_getseed()
+                return sboot_getseed()
                 break
             print("Sending 6B...")
             stage2 = True
@@ -522,8 +551,14 @@ class BootloaderRepl(cmd.Cmd):
         read_bytes_file(int(args[0], 16), int(args[1], 16), args[2])
 
     def do_sboot(self, arg):
-        "Reset into SBOOT Command Shell, execute Seed process"
-        sboot_shell()
+        "Reset into SBOOT Command Shell, execute Seed/Key process"
+        sboot_seed = sboot_shell()
+        print("Calculating key for seed: ")
+        print(sboot_seed.hex())
+        key = get_key_from_seed(sboot_seed.hex()[0:8])
+        print("Key calculated : ")
+        print(key)
+        sboot_sendkey(bytearray.fromhex(key))
 
     def do_sboot_sendkey(self, arg):
         "sboot_sendkey <keydata>: Send Key Data to SBOOT Command Shell"
