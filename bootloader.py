@@ -207,7 +207,7 @@ def sboot_crc_reset(crc_start_address):
     print_success_failure(conn.wait_frame())
     print("Starting Validator and rebooting into BSL...")
     conn.send(bytes([0x79]))
-    time.sleep(0.0004)
+    time.sleep(0.0005)
     upload_bsl(True)
     crc_address = int.from_bytes(read_byte(0xD0010770 .to_bytes(4, "big")), "little")
     print("CRC Address Reached: ")
@@ -226,10 +226,12 @@ def sboot_shell():
     reset_ecu()
     bus.send(Message(data=[0x59, 0x45], arbitration_id=0x7E0, is_extended_id=False))
     print("Sending 59 45...")
+    bus.send(Message(data=[0x6B], arbitration_id=0x7E0, is_extended_id=False))
     stage2 = False
     while True:
         if stage2 is True:
             bus.send(Message(data=[0x6B], arbitration_id=0x7E0, is_extended_id=False))
+            print("Sending 6B...")
         message = bus.recv(0.01)
         print(message)
         if (
@@ -246,7 +248,7 @@ def sboot_shell():
             stage2 = True
         if message is not None and message.arbitration_id == 0x0A7:
             print("FAILURE")
-            break
+            return
 
     pwm.cancel()
 
