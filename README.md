@@ -10,7 +10,7 @@ Unfortunately, when the BSL is invoked, flash memory is locked by the Tricore us
 
 Furthermore, if the ECU is not locked by the Immobilizer and is functioning correctly, Simos18 boot passwords can be extracted using the "Write Without Erase" exploit documented [here](https://github.com/bri3d/VW_Flash/blob/master/docs.md) combined with a simple arbitrary read primitive attached to a CAN handler. The passwords are located at 0x8001420C in the OTP area of flash.
 
-# Documentation
+# Internal Pins and PCB modifications
 
 Perform these PCB modifications to a Simos18 main board to enter the BSL. A few notes:
 
@@ -19,20 +19,41 @@ Perform these PCB modifications to a Simos18 main board to enter the BSL. A few 
 * If you have a nicer setup with pogo pins and pullup / pulldown capability, you're in luck!
 * If you already have boot passwords, simply using the BSL is not timing critical, you can just pull down the CFG attached to the blue/purple wire when you would like to boot. If you do not, and you need to recover the passwords, you need to attach this blue/purple CFG wire and the CPU RST pin to two Pi GPIO pins. The other CFG modifications can be performed statically.
 
+Make these connections statically:
+
 ![PCB1](Board1.jpg)
-![PCB2](Board2.jpg)
 ![PCB3](Board3.jpg)
+
+Connect the following wire or probe to Raspberry Pi GPIO 24 (see https://pinout.xyz ) - this is the HWCFG we use to select "BSL Mode" dynamically. If you are not extracting passwords and just want BSL access, you can just tie this to GND to always enter BSL Mode.
+
+![PCB2](Board2.jpg)
+
+(optional, needed for password extraction only): Connect the following probe to Raspberry Pi GPIO 23 - this is the CPU RST pin we use to perform a reset exploit to infer boot passwords.
+
 ![RST](RST.jpg)
 
-To communicate, connect the following: 
+# Harness Pins
+
+Connect the following pins of the left-hand connector when looking at the opened ECU: 
 
 * + ~13V: Left harness connector pins 6, 50, 86 (6 is one of the large pins, the rest are small).
 * GROUND: 1 (this is the upper-right large pin).
 * CANH: 79, to CAN interface CanH
 * CANL: 80, to CAN interface CanL
-* "PWM1": 66 (only necessary for SBOOT), to a 5V level shifter attached to a Pi GPIO pin.
-* "PWM2": 71 (only necessary for SBOOT), to a 5V level shifter attached to a Pi GPIO pin.
+* "PWM1": 66 (only necessary for SBOOT), to a 5V level shifter attached to GPIO 12.
+* "PWM2": 71 (only necessary for SBOOT), to a 5V level shifter attached to GPIO 13.
 
+# Extra Setup for Password Extraction
+
+* Clone https://github.com/bri3d/Simos18_SBOOT into a sibling directory and compile `twister.c` 
+* Clone https://github.com/resilar/crchack into a sibling directory and compile it per instructions.
+
+# Use
+
+* configure and bring up your SocketCAN interface
+* start pigpio: `sudo pigpiod`
+* `python3 bootloader.py`
+* `help` to see commands
 
 # Current tools:
 
