@@ -1,4 +1,5 @@
-import cmd, sys
+import cmd
+import crc_bruteforce
 import can
 from can import Message
 import math
@@ -9,12 +10,8 @@ import pigpio
 import subprocess
 from udsoncan.connections import IsoTPSocketConnection
 
-TWISTER_PATH = (
-    "../Simos18_SBOOT/twister"
-)  # This is the path to the "twister" binary from https://github.com/bri3d/Simos18_SBOOT
-SEED_START = (
-    "1D00000"
-)  # This is the starting value for the expected timer value range for the Seed/Key calculation.
+TWISTER_PATH = "../Simos18_SBOOT/twister"  # This is the path to the "twister" binary from https://github.com/bri3d/Simos18_SBOOT
+SEED_START = "1D00000"  # This is the starting value for the expected timer value range for the Seed/Key calculation.
 
 sector_map_tc1791 = {  # Sector lengths for PMEM routines
     0: 0x4000,
@@ -216,6 +213,7 @@ def sboot_crc_reset(crc_start_address):
     print("CRC32 Current Value: ")
     print(hex(crc_data))
     conn.close()
+    return (crc_address, crc_data)
 
 
 def sboot_shell():
@@ -242,15 +240,38 @@ def sboot_shell():
             print("Got A0 message")
             if stage2:
                 print("Switching to IsoTP Socket...")
+                pwm.cancel()
                 return sboot_getseed()
-                break
             print("Sending 6B...")
             stage2 = True
         if message is not None and message.arbitration_id == 0x0A7:
             print("FAILURE")
-            return
+            pwm.cancel()
+            return False
 
-    pwm.cancel()
+
+def sboot_login():
+    sboot_seed = sboot_shell()
+    print("Calculating key for seed: ")
+    print(sboot_seed.hex())
+    key = get_key_from_seed(sboot_seed.hex()[0:8])
+    print("Key calculated : ")
+    print(key)
+    sboot_sendkey(bytearray.fromhex(key))
+
+
+def extract_boot_passwords():
+    addresses = map(
+        lambda x: bytearray.fromhex(x), ["8001420C", "80014210", "80014214", "80014218"]
+    )
+    crcs = []
+    for address in addresses:
+        sboot_login()
+        end_address, crc = sboot_crc_reset(address)
+        print(address.hex() + " - " + hex(end_address) + " -> " + hex(crc))
+        crcs.append(hex(crc))
+    boot_passwords = crc_bruteforce.calculate_passwords(crcs)
+    print(boot_passwords.hex())
 
 
 # Enter REPL
@@ -554,13 +575,7 @@ class BootloaderRepl(cmd.Cmd):
 
     def do_sboot(self, arg):
         "Reset into SBOOT Command Shell, execute Seed/Key process"
-        sboot_seed = sboot_shell()
-        print("Calculating key for seed: ")
-        print(sboot_seed.hex())
-        key = get_key_from_seed(sboot_seed.hex()[0:8])
-        print("Key calculated : ")
-        print(key)
-        sboot_sendkey(bytearray.fromhex(key))
+        sboot_login()
 
     def do_sboot_sendkey(self, arg):
         "sboot_sendkey <keydata>: Send Key Data to SBOOT Command Shell"
@@ -592,6 +607,10 @@ class BootloaderRepl(cmd.Cmd):
         "erase_sector <addr> : Erase sector beginning with address"
         byte_specifier = bytearray.fromhex(arg)
         erase_sector(byte_specifier)
+
+    def do_extract_boot_passwords(self, arg):
+        "extract_boot_passwords : Extract Simos18 boot passwords using SBoot exploit chain. Requires 'crchack' in ../crchack and 'twister' in ../Simos18_SBOOT"
+        extract_boot_passwords()
 
     def do_bye(self, arg):
         "Exit"
