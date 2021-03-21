@@ -350,7 +350,7 @@ def write_byte(addr, value):
     bus.send(message)
     byte_data = bytearray()
     message = bus.recv()
-    if message.data[0] != 0x4:
+    if message.data[0] != 0x3:
         return False
     data = bytearray([0x03])
     data += value
@@ -358,7 +358,7 @@ def write_byte(addr, value):
     message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300, data=data)
     bus.send(message)
     message = bus.recv()
-    if message.data[0] != 0x4:
+    if message.data[0] != 0x3:
         return False
     else:
         return True
