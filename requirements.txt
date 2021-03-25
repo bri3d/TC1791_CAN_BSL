@@ -1,0 +1,5 @@
+python-can
+lz4
+tqdm
+pigpio
+udsoncan

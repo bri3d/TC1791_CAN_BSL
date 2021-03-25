@@ -2,6 +2,7 @@ import cmd
 import crc_bruteforce
 import can
 from can import Message
+import lz4.block
 import math
 from tqdm import tqdm
 import struct
@@ -9,6 +10,7 @@ import time
 import pigpio
 import subprocess
 from udsoncan.connections import IsoTPSocketConnection
+import socket
 
 TWISTER_PATH = "../Simos18_SBOOT/twister"  # This is the path to the "twister" binary from https://github.com/bri3d/Simos18_SBOOT
 SEED_START = "1D00000"  # This is the starting value for the expected timer value range for the Seed/Key calculation.
@@ -523,6 +525,33 @@ def read_bytes_file(base_addr, size, filename):
     output_file.close()
 
 
+def read_compressed(address, size, filename):
+    output_file = open(filename, "wb")
+    data = bytearray([0x07])
+    data += address
+    data += size
+    message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300, data=data)
+    bus.send(message)
+    total_size_remaining = int.from_bytes(size, "big")
+    t = tqdm(total=total_size_remaining, unit="B")
+    while total_size_remaining > 0:
+        message = bus.recv()
+        compressed_size = size_remaining = int.from_bytes(message.data[5:8], "big")
+        # print("Waiting for compressed data of size: " + hex(size_remaining))
+        data = bytearray()
+        while size_remaining > 0:
+            message = bus.recv()
+            data += message.data[2:6]
+            size_remaining -= 4
+        decompressed_data = lz4.block.decompress(data[:compressed_size], 4096)
+        decompressed_size = len(decompressed_data)
+        t.update(decompressed_size)
+        total_size_remaining -= decompressed_size
+        output_file.write(decompressed_data)
+    output_file.close()
+    t.close()
+
+
 class BootloaderRepl(cmd.Cmd):
     intro = "Welcome to Tricore BSL. Type help or ? to list commands, you are likely looking for upload to start.\n"
     prompt = "(BSL) "
@@ -611,6 +640,14 @@ class BootloaderRepl(cmd.Cmd):
     def do_extract_boot_passwords(self, arg):
         "extract_boot_passwords : Extract Simos18 boot passwords using SBoot exploit chain. Requires 'crchack' in ../crchack and 'twister' in ../Simos18_SBOOT"
         extract_boot_passwords()
+
+    def do_compressed_read(self, arg):
+        "compressed_read <addr> <length> <filename>: read data using LZ4 compression (fast, hopefully)"
+        args = arg.split()
+        byte_specifier = bytearray.fromhex(args[0])
+        length_specifier = bytearray.fromhex(args[1])
+        filename = args[2]
+        is_success = read_compressed(byte_specifier, length_specifier, filename)
 
     def do_bye(self, arg):
         "Exit"
