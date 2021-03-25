@@ -6,17 +6,20 @@
 C_SRCS += \
 ../src/CAN.c \
 ../src/FLASH.c \
-../src/MAIN.c 
+../src/MAIN.c \
+../src/lz4.c 
 
 OBJS += \
 ./src/CAN.o \
 ./src/FLASH.o \
-./src/MAIN.o 
+./src/MAIN.o \
+./src/lz4.o 
 
 C_DEPS += \
 ./src/CAN.d \
 ./src/FLASH.d \
-./src/MAIN.d 
+./src/MAIN.d \
+./src/lz4.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes

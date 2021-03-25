@@ -11,6 +11,7 @@
     <Region Description="Scratch-Pad RAM (PSPR)" Name="PMI_PSPR" Begin="0xC0000000" Attributes="wx!p" Length="32" LengthUnit="KB"/>
   </Memory>
   <Memory Description="Data Memory Interface (DMI)" Name="Data Interface">
+    <Region Description="LMURAM" Name="LMU_DSPR" Begin="0xB0000000" Attributes="w!xp" Length="128" LengthUnit="KB"/>
     <Region Description="Local Data RAM (DSPR)" Name="DMI_DSPR" Begin="0xD000000C" Attributes="w!xp" Length="128" LengthUnit="KB"/>
   </Memory>
   <Memory Description="PCP Memory" Name="PCP">

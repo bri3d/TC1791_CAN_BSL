@@ -36,6 +36,9 @@ __BROM_SIZE = 16K;
 /*Scratch-Pad RAM (PSPR)*/ 
 __PMI_PSPR_BEGIN = 0xC0000000;
 __PMI_PSPR_SIZE = 32K;
+/*LMURAM*/ 
+__LMU_DSPR_BEGIN = 0xB0000000;
+__LMU_DSPR_SIZE = 128K;
 /*Local Data RAM (DSPR)*/ 
 __DMI_DSPR_BEGIN = 0xD000000C;
 __DMI_DSPR_SIZE = 128K;
@@ -47,7 +50,7 @@ __PCP_PRAM_BEGIN = 0xF0050000;
 __PCP_PRAM_SIZE = 16K;
 
 
-__USTACK_SIZE = DEFINED (__USTACK_SIZE) ? __USTACK_SIZE : 1K;  /* Section for ustack*/ 
+__USTACK_SIZE = DEFINED (__USTACK_SIZE) ? __USTACK_SIZE : 64K;  /* Section for ustack*/ 
 __ISTACK_SIZE = DEFINED (__ISTACK_SIZE) ? __ISTACK_SIZE : 256;  /* Section for istack*/ 
 __HEAP_SIZE = DEFINED (__HEAP_SIZE) ? __HEAP_SIZE : 4K;  /* Section for heap*/ 
 __CSA_SIZE = DEFINED (__CSA_SIZE) ? __CSA_SIZE : 16K;  /* Section for CSA*/ 
@@ -56,7 +59,6 @@ __CSA_SIZE = DEFINED (__CSA_SIZE) ? __CSA_SIZE : 16K;  /* Section for CSA*/
  *	User defined global region
  */
 /*PROTECTED REGION ID(Protection:iRAM-Global) ENABLED START*/
-/*Protection-Area for your own LDF-Code*/
 /*PROTECTED REGION END*/
 
 /*
@@ -70,6 +72,7 @@ MEMORY
 	PMU_DFLASH1 (r!xp):	org = 0xAF080000, len = 64K  /*Data Flash Memory (DFLASH1)*/ 
 	BROM (rx!p):	org = 0xAFFFC000, len = 16K  /*Boot ROM (BROM)*/ 
 	PMI_PSPR (wx!p):	org = 0xC0000000, len = 32K  /*Scratch-Pad RAM (PSPR)*/ 
+	LMU_DSPR (w!xp):	org = 0xB0000000, len = 128K  /*LMURAM*/ 
 	DMI_DSPR (w!xp):	org = 0xD000000C, len = 128K  /*Local Data RAM (DSPR)*/ 
 	PCP_CMEM (rxp):	org = 0xF0060000, len = 32K  /*PCP Code Memory (CMEM)*/ 
 	PCP_PRAM (wp!x):	org = 0xF0050000, len = 16K  /*PCP Data Memory (PRAM)*/ 
@@ -596,7 +599,7 @@ SECTIONS
 		. = ALIGN(8);
 		 __USTACK = . ;
 		 __USTACK_END = . ;
-	} > DMI_DSPR
+	} > LMU_DSPR
 	
 	/*
 	 * Section for istack

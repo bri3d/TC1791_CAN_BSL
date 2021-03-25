@@ -222,7 +222,8 @@ enum CAN_COMMAND {
 	WRITE_MEM32 = 3,
 	UNLOCK_PASSWORD = 4,
 	ERASE_SECTOR = 5,
-	WRITE_PAGE = 6
+	WRITE_PAGE = 6,
+	READ_COMPRESSED = 7
 };
 
 enum CURRENT_STATUS {
@@ -250,6 +251,12 @@ struct write_page_state {
 	uword address;
 	uword cursor;
 	ubyte assemblyBuffer[256];
+};
+
+struct compress_read_state {
+	uword address;
+	uword cursor;
+	uword length;
 };
 
 
