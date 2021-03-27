@@ -64,15 +64,13 @@ void MAIN_vInit(void) {
 		////   disconnected first
 
 		MAIN_vResetENDINIT()
-;
-		SCU_PLLCON0.bits.VCOBYP = 0;  // reset VCO bypass
+;		SCU_PLLCON0.bits.VCOBYP = 0;  // reset VCO bypass
 		SCU_PLLCON0.bits.SETFINDIS = 1; // disconnect OSC from PLL
 		MAIN_vSetENDINIT();
 
 		if (!SCU_PLLSTAT.bits.PWDSTAT) {
 			MAIN_vResetENDINIT()
-;
-			SCU_CCUCON0.reg = 0x00000001; // set FPI,SRI and PCP dividers
+;			SCU_CCUCON0.reg = 0x00000001; // set FPI,SRI and PCP dividers
 			SCU_PLLCON0.bits.VCOBYP = 1; // set VCO bypass (goto Prescaler Mode)
 			while (!SCU_PLLSTAT.bits.VCOBYST)
 				; // wait for prescaler mode
@@ -82,15 +80,13 @@ void MAIN_vInit(void) {
 			while (SCU_PLLSTAT.bits.VCOLOCK == 0)
 				; // wait for LOCK
 			MAIN_vResetENDINIT()
-;
-			SCU_PLLCON0.bits.VCOBYP = 0; // Reset VCO bypass (Leave Prescaler Mode)
+;			SCU_PLLCON0.bits.VCOBYP = 0; // Reset VCO bypass (Leave Prescaler Mode)
 			MAIN_vSetENDINIT();
 		}
 	}
 
 	MAIN_vResetENDINIT()
-;
-	WDT_CON1.reg = 0X8; // Disable watchdog timer
+;	WDT_CON1.reg = 0X8; // Disable watchdog timer
 	MAIN_vSetENDINIT();
 
 	///  -----------------------------------------------------------------------
@@ -113,8 +109,7 @@ void MAIN_vInit(void) {
 	///  - maximum channel number checking is disabled
 
 	MAIN_vResetENDINIT()
-;
-	PCP_CLC.reg = 0x00000000;   // load PCP clock control register
+;	PCP_CLC.reg = 0x00000000;   // load PCP clock control register
 	PCP_CS.reg = 0x00000200;   // load PCP control and status register
 	MAIN_vSetENDINIT();
 
@@ -146,8 +141,7 @@ void MAIN_vInit(void) {
 	///  - enable the DMA module
 
 	MAIN_vResetENDINIT()
-;
-	DMA_CLC.reg = 0x00000008;   // DMA clock control register
+;	DMA_CLC.reg = 0x00000008;   // DMA clock control register
 	DummyToForceRead = DMA_CLC.reg; // read it back to ensure it is read
 	MAIN_vSetENDINIT();
 
@@ -450,6 +444,24 @@ ubyte MAIN_CMD_writeFlashPageData(CAN_SWObj *cur_msg) {
 
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
+void MAIN_waitAckOrTimeout(uword timeout_ms) {
+	CAN_SWObj cur_msg;
+	uword start_val = STM_TIM0.reg;
+	while (1) {
+		if (CAN_ubNewData(0)) {
+			CAN_vGetMsgObj(0, &cur_msg);
+			CAN_vReleaseObj(0);
+			if(cur_msg.ubData[0] == 0x7 && cur_msg.ubData[1] == 0xAC) {
+				return;
+			}
+		} else {
+			if((STM_TIM0.reg - start_val) > (timeout_ms * 100000)) {
+				return;
+			}
+		}
+	}
+}
+
 void MAIN_CMD_readCompressed(CAN_SWObj *cur_msg) {
 	uword address = (cur_msg->ubData[1] << 24) | (cur_msg->ubData[2] << 16)
 			| (cur_msg->ubData[3] << 8) | cur_msg->ubData[4];
@@ -477,17 +489,17 @@ void MAIN_CMD_readCompressed(CAN_SWObj *cur_msg) {
 			}
 			ubyte canData[8];
 			canData[0] = 0x7;
-			canData[1] = ((uword)inpPtr >> 24) & 0xFF;
-			canData[2] = ((uword)inpPtr >> 16) & 0xFF;
-			canData[3] = ((uword)inpPtr >> 8) & 0xFF;
-			canData[4] = (uword)inpPtr & 0xFF;
+			canData[1] = ((uword) inpPtr >> 24) & 0xFF;
+			canData[2] = ((uword) inpPtr >> 16) & 0xFF;
+			canData[3] = ((uword) inpPtr >> 8) & 0xFF;
+			canData[4] = (uword) inpPtr & 0xFF;
 			canData[5] = (cmpBytes >> 16) & 0xFF;
 			canData[6] = (cmpBytes >> 8) & 0xFF;
 			canData[7] = cmpBytes & 0xFF;
 			MAIN_sendCan(canData);
 			ubyte canSeq = 0;
 			int i = 0;
-			for (i = 0; i < cmpBytes; i += 4) {
+			for (i = 0; i < cmpBytes; i += 6) {
 				canSeq++;
 				canData[0] = 0x7;
 				canData[1] = canSeq;
@@ -495,13 +507,13 @@ void MAIN_CMD_readCompressed(CAN_SWObj *cur_msg) {
 				canData[3] = cmpBuf[i + 1];
 				canData[4] = cmpBuf[i + 2];
 				canData[5] = cmpBuf[i + 3];
-				canData[6] = 0xFF;
-				canData[7] = 0xFF;
+				canData[6] = cmpBuf[i + 4];
+				canData[7] = cmpBuf[i + 5];
 				MAIN_sendCan(canData);
 			}
+			MAIN_waitAckOrTimeout(10000U);
 		}
 	}
-
 }
 
 void MAIN_processMessage(CAN_SWObj *cur_msg) {
