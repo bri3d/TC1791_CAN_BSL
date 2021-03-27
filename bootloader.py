@@ -539,15 +539,27 @@ def read_compressed(address, size, filename):
         compressed_size = size_remaining = int.from_bytes(message.data[5:8], "big")
         # print("Waiting for compressed data of size: " + hex(size_remaining))
         data = bytearray()
+        sequence = 1
         while size_remaining > 0:
             message = bus.recv()
-            data += message.data[2:6]
-            size_remaining -= 4
+            new_sequence = message.data[1]
+            if sequence != new_sequence:
+                print("Sequencing error! " + hex(new_sequence) + hex(sequence))
+                t.close()
+                output_file.close()
+                return
+            sequence += 1
+            sequence = sequence & 0xFF
+            data += message.data[2:8]
+            size_remaining -= 6
         decompressed_data = lz4.block.decompress(data[:compressed_size], 4096)
         decompressed_size = len(decompressed_data)
         t.update(decompressed_size)
         total_size_remaining -= decompressed_size
         output_file.write(decompressed_data)
+        data = bytearray([0x07, 0xAC])  # send an ACk packet
+        message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300, data=data)
+        bus.send(message)
     output_file.close()
     t.close()
 
