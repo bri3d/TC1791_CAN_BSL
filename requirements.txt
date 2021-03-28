@@ -3,3 +3,4 @@ lz4
 tqdm
 pigpio
 udsoncan
+can-isotp
