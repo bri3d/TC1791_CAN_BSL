@@ -12,12 +12,22 @@ import subprocess
 from udsoncan.connections import IsoTPSocketConnection
 import socket
 
+
 TWISTER_PATH = (
     "../Simos18_SBOOT/twister"
 )  # This is the path to the "twister" binary from https://github.com/bri3d/Simos18_SBOOT
+
+# Configurable parameters:
+
+# For a Pi 3B+, 0.0005 seems right. For a Pi 4, 0.0008 has been observed to work correctly (presumably latency between sleep and GPIO is lower).
+CRC_DELAY = (
+    0.0005
+)  # This is the amount of time a single iteration of the CRC process takes. This will need to be adjusted through observation, checking the output of the boot password read process until 0x100 bytes are being checked.
+
 SEED_START = (
     "1D00000"
-)  # This is the starting value for the expected timer value range for the Seed/Key calculation.
+)  # This is the starting value for the expected timer value range for the Seed/Key calculation. This seems to work for both Pi 3B+ and Pi 4.
+
 
 sector_map_tc1791 = {  # Sector lengths for PMEM routines
     0: 0x4000,
@@ -210,7 +220,7 @@ def sboot_crc_reset(crc_start_address):
     print_success_failure(conn.wait_frame())
     print("Starting Validator and rebooting into BSL...")
     conn.send(bytes([0x79]))
-    time.sleep(0.0005)
+    time.sleep(CRC_DELAY)
     upload_bsl(True)
     crc_address = int.from_bytes(read_byte(0xD0010770 .to_bytes(4, "big")), "little")
     print("CRC Address Reached: ")
