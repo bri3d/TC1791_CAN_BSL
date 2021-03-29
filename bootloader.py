@@ -12,8 +12,12 @@ import subprocess
 from udsoncan.connections import IsoTPSocketConnection
 import socket
 
-TWISTER_PATH = "../Simos18_SBOOT/twister"  # This is the path to the "twister" binary from https://github.com/bri3d/Simos18_SBOOT
-SEED_START = "1D00000"  # This is the starting value for the expected timer value range for the Seed/Key calculation.
+TWISTER_PATH = (
+    "../Simos18_SBOOT/twister"
+)  # This is the path to the "twister" binary from https://github.com/bri3d/Simos18_SBOOT
+SEED_START = (
+    "1D00000"
+)  # This is the starting value for the expected timer value range for the Seed/Key calculation.
 
 sector_map_tc1791 = {  # Sector lengths for PMEM routines
     0: 0x4000,
@@ -660,6 +664,10 @@ class BootloaderRepl(cmd.Cmd):
         length_specifier = bytearray.fromhex(args[1])
         filename = args[2]
         is_success = read_compressed(byte_specifier, length_specifier, filename)
+
+    def do_reset():
+        "reset: reset ECU"
+        reset_ecu()
 
     def do_bye(self, arg):
         "Exit"
