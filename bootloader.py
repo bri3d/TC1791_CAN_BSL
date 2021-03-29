@@ -665,7 +665,7 @@ class BootloaderRepl(cmd.Cmd):
         filename = args[2]
         is_success = read_compressed(byte_specifier, length_specifier, filename)
 
-    def do_reset():
+    def do_reset(self, arg):
         "reset: reset ECU"
         reset_ecu()
 
