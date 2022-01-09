@@ -36,10 +36,15 @@ Furthermore, if the ECU is not locked by the Immobilizer and is functioning corr
 
 Make these connections:
 
+The first set of connections is to enable the CAN transceiver into NORMAL mode using two of its configuration pins (EN and STB_N). Normally this is done as part of the boot process, but we need it brought up before the CPU has run any code:
+
 ![PCB1](Board1.jpg)
+
+The next set of connections is to enable the correct VOut phases of the SC9 power management chip:
+
 ![PCB3](Board3.jpg)
 
-Connect the following wire or probe to Raspberry Pi GPIO 24 (see https://pinout.xyz ) - this is the HWCFG we use to select "BSL Mode" dynamically. If you are not extracting passwords and just want BSL access, you can just tie this to GND to always enter BSL Mode.
+This connection needs to connect to Raspberry Pi GPIO 24 (see https://pinout.xyz ). This is the HWCFG selection we use to select "BSL Mode" for the TriCore CPU. If you are not extracting passwords and just want BSL access, you can just tie this to GND to always enter BSL Mode.
 
 ![PCB2](Board2.jpg)
 
