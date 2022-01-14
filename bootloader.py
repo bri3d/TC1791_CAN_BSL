@@ -28,7 +28,6 @@ SEED_START = (
     "1D00000"
 )  # This is the starting value for the expected timer value range for the Seed/Key calculation. This seems to work for both Pi 3B+ and Pi 4.
 
-
 sector_map_tc1791 = {  # Sector lengths for PMEM routines
     0: 0x4000,
     1: 0x4000,
@@ -504,6 +503,15 @@ def read_flash_properties(flash_num, pmu_base_addr):
         pmem_string + " Write Protection User 1 Inhibit: ", flash_status_write[2]
     )
 
+    flash_status_overall = bits(fsr_value[0])
+    print_enabled_disabled(pmem_string + " Page Mode Enabled: ", flash_status_overall[6])
+
+    flash_status_errors = bits(fsr_value[1])
+    print_enabled_disabled(pmem_string + " Flash Operation Error: ", flash_status_errors[0])
+    print_enabled_disabled(pmem_string + " Flash Command Sequence Error: ", flash_status_errors[2])
+    print_enabled_disabled(pmem_string + " Flash Locked Error: ", flash_status_errors[3])
+    print_enabled_disabled(pmem_string + " Flash ECC Error: ", flash_status_errors[4])
+
     protection_status = bits(fcon_value[2])
     print_enabled_disabled(pmem_string + " Read Protection: ", protection_status[0])
     print_enabled_disabled(
@@ -551,7 +559,7 @@ def read_compressed(address, size, filename):
     while total_size_remaining > 0:
         message = bus.recv()
         compressed_size = size_remaining = int.from_bytes(message.data[5:8], "big")
-        # print("Waiting for compressed data of size: " + hex(size_remaining))
+        #print("Waiting for compressed data of size: " + hex(size_remaining))
         data = bytearray()
         sequence = 1
         while size_remaining > 0:
@@ -577,6 +585,42 @@ def read_compressed(address, size, filename):
     output_file.close()
     t.close()
 
+def write_file(address, size, filename):
+    input_file = open(filename, "rb")
+    total_size_remaining = int.from_bytes(size, "big")
+    t = tqdm(total=total_size_remaining, unit="B")
+    address_int = int.from_bytes(address, "big")
+    block_counter = 0
+    while total_size_remaining > 0:
+        if block_counter <= 0:
+          block_counter = 256
+          data = bytearray([0x06])
+          address_bytes = address_int.to_bytes(4, "big")
+          data += address_bytes
+          message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300, data=data)
+          bus.send(message)
+          bus.recv()
+        if block_counter < 4:
+          data_len = block_counter
+        else:
+          data_len = 4
+        file_data = input_file.read(data_len)
+        file_data += bytearray([0xAA] * (4 - data_len))
+        data = bytearray([0x06])
+        # Work around an issue in the current bootloader binary where only every other CAN byte is used. TODO: Remove this once bootloader is fixed and recompiled.
+        data += bytearray([file_data[0], 0xAA, file_data[1], 0xAA, file_data[2], 0xAA, file_data[3]])
+        message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300, data=data)
+        bus.send(message)
+        time.sleep(0.005)
+        block_counter -= data_len
+        total_size_remaining -= data_len
+        if block_counter <= 0:
+          bus.recv()
+          t.update(total_size_remaining)
+          address_int += 256
+    input_file.close()
+    t.close()
+
 
 class BootloaderRepl(cmd.Cmd):
     intro = "Welcome to Tricore BSL. Type help or ? to list commands, you are likely looking for upload to start.\n"
@@ -584,11 +628,11 @@ class BootloaderRepl(cmd.Cmd):
     file = None
 
     def do_upload(self, arg):
-        "Upload BSL to device"
+        "upload: Upload BSL to device"
         upload_bsl()
 
     def do_deviceid(self, arg):
-        "Read the Tricore Device ID from 0xD0000000 to 0xD000000C"
+        "deviceid: Read the Tricore Device ID from 0xD0000000 to 0xD000000C"
         device_id = read_device_id()
         if len(device_id) > 1:
             print(device_id.hex())
@@ -613,14 +657,14 @@ class BootloaderRepl(cmd.Cmd):
             print("Failed to write value.")
 
     def do_flashinfo(self, arg):
-        "Read flash information including PMEM protection status"
+        "flashinfo: Read flash information including PMEM protection status"
         PMU_BASE_ADDRS = {0: 0xF8001000, 1: 0xF8003000}
 
         for pmu_num in PMU_BASE_ADDRS:
             read_flash_properties(pmu_num, PMU_BASE_ADDRS[pmu_num])
 
     def do_dumpmaskrom(self, arg):
-        "Dump the Tricore Mask ROM to maskrom.bin"
+        "dumpmaskrom: Dump the Tricore Mask ROM to maskrom.bin"
         read_bytes_file(0xAFFFC000, 0x4000, "maskrom.bin")
 
     def do_dumpmem(self, arg):
@@ -629,7 +673,7 @@ class BootloaderRepl(cmd.Cmd):
         read_bytes_file(int(args[0], 16), int(args[1], 16), args[2])
 
     def do_sboot(self, arg):
-        "Reset into SBOOT Command Shell, execute Seed/Key process"
+        "sboot: Reset into SBOOT Command Shell, execute Seed/Key process"
         sboot_login()
 
     def do_sboot_sendkey(self, arg):
@@ -674,6 +718,14 @@ class BootloaderRepl(cmd.Cmd):
         length_specifier = bytearray.fromhex(args[1])
         filename = args[2]
         is_success = read_compressed(byte_specifier, length_specifier, filename)
+
+    def do_write_file(self, arg):
+        "write_file <addr> <length> <filename>: write data"
+        args = arg.split()
+        byte_specifier = bytearray.fromhex(args[0])
+        length_specifier = bytearray.fromhex(args[1])
+        filename = args[2]
+        is_success = write_file(byte_specifier, length_specifier, filename)
 
     def do_reset(self, arg):
         "reset: reset ECU"
