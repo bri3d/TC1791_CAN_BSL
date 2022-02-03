@@ -416,7 +416,6 @@ ubyte MAIN_CMD_writeFlashPageData(CAN_SWObj *cur_msg) {
 			break;
 		}
 		writePageState.cursor += 1;
-		i += 1;
 	}
 	if (writePageState.cursor == 255) {
 		uword baseAddress =

@@ -600,15 +600,14 @@ def write_file(address, size, filename):
           message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300, data=data)
           bus.send(message)
           bus.recv()
-        if block_counter < 4:
+        if block_counter < 7:
           data_len = block_counter
         else:
-          data_len = 4
+          data_len = 7
         file_data = input_file.read(data_len)
-        file_data += bytearray([0xAA] * (4 - data_len))
+        file_data += bytearray([0xAA] * (7 - data_len))
         data = bytearray([0x06])
-        # Work around an issue in the current bootloader binary where only every other CAN byte is used. TODO: Remove this once bootloader is fixed and recompiled.
-        data += bytearray([file_data[0], 0xAA, file_data[1], 0xAA, file_data[2], 0xAA, file_data[3]])
+        data += bytearray([file_data[0], file_data[1], file_data[2], file_data[3], file_data[4], file_data[5], file_data[6]])
         message = Message(is_extended_id=False, dlc=8, arbitration_id=0x300, data=data)
         bus.send(message)
         time.sleep(0.005)

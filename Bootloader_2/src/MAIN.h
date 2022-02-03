@@ -204,7 +204,7 @@ void MAIN_vWriteWDTCON0(uword uwValue);
 // @Project Includes
 //****************************************************************************
 
-#include  <TC1791.h> 
+#include  <tc1791.h> 
 #include  <machine/intrinsics.h>
 #include  <machine/cint.h>
 #include  <string.h>

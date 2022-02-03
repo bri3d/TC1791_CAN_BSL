@@ -38,7 +38,7 @@ all: Bootloader_2.elf
 Bootloader_2.elf: $(OBJS) $(USER_OBJS) $(ASM)
 	@echo 'Building target: $@'
 	@echo 'Invoking: TriCore C Linker'
-	"$(TRICORE_TOOLS)/bin/tricore-gcc" -o  "Bootloader_2.elf" -T"../ld/iRAM.ld" @"iRAM.objectlist" -Wl,--gc-sections -mcpu=tc1791 -Wl,--mem-holes -Wl,--no-warn-flags -Wl,-Map="$(basename $(notdir $@)).map" -Wl,--cref -fshort-double -Wl,-n -Wl,--extmap="a"
+	"$(TRICORE_TOOLS)/bin/tricore-elf-gcc" -o  "Bootloader_2.elf" -T"../ld/iRAM.ld" @"iRAM.objectlist" -Wl,--gc-sections -mcpu=tc1791 -Wl,--mem-holes -Wl,--no-warn-flags -Wl,-Map="$(basename $(notdir $@)).map" -Wl,--cref -fshort-double -Wl,-n -Wl,--extmap="a"
 	@echo 'Finished building target: $@'
 	@echo ' '
 
