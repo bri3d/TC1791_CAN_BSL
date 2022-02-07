@@ -75,6 +75,7 @@ Connect the following pins of the left-hand connector when looking at the opened
 * Perform the above steps to configure the ECU for BSL mode. Ensure you have `../Simos18_SBOOT/twister` and `../crchack/crchack` compiled.
 * In total, you should have seven connections to the ECU mainboard, via probes or solder - a jumper between two test points, two points connected via resistor to a third point (3V3), and two points connected directly to GPIO 23 and 24 on the Pi. 
 * You should also have eight connections to the ECU connector: GPIO 12 should be attached to a 5V level shifter, then to pin 66 on the ECU connector. GPIO 13 should be attached to another 5V level shifter, then to pin 71 on the ECU connector. CanH to pin 79 and CanL to pin 80. Then, 3 power connections and 1 ground connection. 
+* If your Pi and ECU are powered separately (for example, the Pi via USB and the ECU via a bench PSU), make sure the grounds are linked and not floating as this can cause issues. The easiest way to do this is to connect another GND pin on the ECU connector to a GND on the Pi.
 * Ensure `pigpiod` is running: `sudo pigpiod`
 * Ensure `can0` is up at bitrate `500000` and with the `txqueuelen` increased: `sudo ip link set can0 up type can bitrate 500000 && sudo ifconfig can0 txqueuelen 65536`
 * Start `python3 bootloader.py` and run the following commands:
